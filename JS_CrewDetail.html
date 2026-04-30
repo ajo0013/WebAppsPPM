@@ -1,0 +1,858 @@
+<script>
+    let currentKodeCrew = "";
+    let currentCrewData = [];
+    let listKapal = [];
+
+    function muatReferensiKapal() {
+        google.script.run.withSuccessHandler(function(data) {
+            listKapal = data;
+            let options = '<option value="">- Pilih Jenis -</option>';
+            data.forEach(k => options += `<option value="${k}">${k}</option>`);
+            const dropdowns = document.querySelectorAll('.dropdown-kapal');
+            dropdowns.forEach(sel => sel.innerHTML = options);
+        }).getShipTypes();
+    }
+
+    function lihatDetail(kodeCrew) {
+      currentKodeCrew = kodeCrew;
+      loadPage('CrewDetail');
+      document.getElementById('detail-nama-kru').innerText = "Memuat Profil...";
+      
+      // Kosongkan tabel sementara agar terlihat efek loading
+      document.getElementById('table-fam').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2 text-primary"></div>Memuat...</td></tr>';
+      document.getElementById('table-doc').innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2 text-primary"></div>Memuat...</td></tr>';
+      document.getElementById('table-sea').innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2 text-primary"></div>Memuat...</td></tr>';
+
+      muatReferensiKapal(); // Ini kecil jadi biarkan saja berjalan terpisah
+
+      // ==========================================
+      // OPTIMASI: TARIK SEMUA TABEL DALAM 1 REQUEST
+      // ==========================================
+      google.script.run
+          .withSuccessHandler(function(res) {
+              if (!res.profil) { alert("Data Kru tidak ditemukan!"); loadPage('CrewList'); return; }
+              
+              // 1. Render Kartu Profil Utama
+              renderProfile(res.profil);
+              
+              // 2. Tembakkan Data ke Masing-masing Tabel
+              renderTableFam(res.famData);
+              renderTableDoc(res.docData);
+              renderTableSea(res.seaData);
+          })
+          .withFailureHandler(function(error){ alert("Gagal memuat detail: " + error.message); loadPage('CrewList'); })
+          .getCrewFullDetail(kodeCrew);
+  }
+
+    function renderProfile(data) {
+        if(!data) { alert("Data Kru tidak ditemukan!"); loadPage('CrewList'); return; }
+        currentCrewData = data;
+        var imgElemen = document.getElementById('detail-foto');
+        if (imgElemen) {
+            let linkFotoDrive = data[10] || '';
+            var namaAsli = data[1] ? data[1] : 'Kru';
+            var namaFormat = namaAsli.replace(/ /g, "+");
+            var linkInisial = "https://ui-avatars.com/api/?name=" + namaFormat + "&size=120&background=random&color=fff";
+            if (linkFotoDrive && linkFotoDrive.includes('drive.google.com')) {
+                let fileIdMatch = linkFotoDrive.match(/[-\w]{25,}/);
+                if (fileIdMatch && fileIdMatch[0]) {
+                    imgElemen.src = "https://drive.google.com/thumbnail?id=" + fileIdMatch[0] + "&sz=w400";
+                    imgElemen.onerror = function() { this.onerror = null; this.src = linkInisial; };
+                } else { imgElemen.src = linkInisial; }
+            } else { imgElemen.src = linkInisial; }
+        }
+
+        document.getElementById('detail-kode').innerText = data[0] || '-';
+        document.getElementById('detail-nama-kru').innerText = data[1] || '-';
+        document.getElementById('detail-jabatan').innerText = data[2] || '-';
+        document.getElementById('detail-ttl').innerText = (data[3] || '-') + ", " + (data[4] || '-');
+        document.getElementById('detail-telepon').innerText = data[5] || '-';
+        document.getElementById('detail-email').innerText = data[6] || '-';
+        document.getElementById('detail-asal').innerText = data[7] || '-';
+        document.getElementById('detail-nik').innerText = data[8] || '-';
+        document.getElementById('detail-status').innerText = data[12] || '-';
+        document.getElementById('detail-usia').innerText = data[13] || '-';
+        document.getElementById('detail-skill').innerText = data[14] || '-';
+        document.getElementById('detail-tgl-input').innerText = data[16] ? data[16].toString().substring(0,10) : '-';
+    }
+
+    // OPTIMASI: DOM Rendering
+    function renderTableFam(data) {
+        const tbody = document.getElementById('table-fam');
+        if(!tbody) return;
+        
+        if(data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Belum ada data keluarga.</td></tr>';
+            return;
+        }
+        
+        let htmlString = '';
+        data.forEach(row => {
+            htmlString += `<tr>
+                <td class="ps-3 fw-bold">${row[2] || '-'}</td>
+                <td>${row[3] || '-'}</td>
+                <td>${row[5] || '-'}</td>
+                <td class="text-center pe-3">
+                    <div class="d-flex justify-content-center gap-2">
+                        <button class="btn btn-sm btn-light text-warning shadow-sm border-0" onclick="bukaModalEditFam('${row[0]}','${row[2]}','${row[3]}','${row[4]}','${row[5]}','${row[6]}')" title="Edit Data"><i class="bi bi-pencil-square"></i></button>
+                        <button class="btn btn-sm btn-light text-danger shadow-sm border-0" onclick="hapusFam('${row[0]}')" title="Hapus Data"><i class="bi bi-trash-fill"></i></button>
+                    </div>
+                </td>
+            </tr>`;
+        });
+        tbody.innerHTML = htmlString;
+    }
+
+    // OPTIMASI: DOM Rendering
+    function renderTableDoc(data) {
+        const tbody = document.getElementById('table-doc');
+        if(!tbody) return;
+        
+        if(data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Belum ada dokumen yang diinput.</td></tr>';
+            return;
+        }
+
+        const docOrder = [
+            "PP", "CDC", "YELLOW", "COC", "COE", "GMDSS", "GMDSE", "ABLE/RATING", 
+            "BST", "AFF", "SCRB", "MFA", "SAT", "SDSD", "SSO", "MCOB", "ERRM", 
+            "BRM", "ARPA", "RADAR", "ECDIS", "BOCT", "BLGT", "AOT", "ACT", "ALGT"
+        ];
+        data.sort((a, b) => {
+            let tipeA = (a[2] || "").toString().toUpperCase().trim();
+            let tipeB = (b[2] || "").toString().toUpperCase().trim();
+            let rankA = docOrder.findIndex(d => tipeA === d || tipeA.includes(d));
+            let rankB = docOrder.findIndex(d => tipeB === d || tipeB.includes(d));
+            rankA = rankA === -1 ? 999 : rankA; rankB = rankB === -1 ? 999 : rankB;
+            if (rankA === rankB) return tipeA.localeCompare(tipeB);
+            return rankA - rankB;
+        });
+
+        const hariIni = new Date();
+        let htmlString = '';
+        data.forEach(function(row) {
+            const tipeDokumen = (row[2] || "").toString().toUpperCase().trim();
+            let expiryDateStr = row[6] || "";
+            let expiryDisplay = expiryDateStr || '-';
+
+            if (expiryDateStr) {
+                let expDate = new Date(expiryDateStr);
+                let sisaBulan = (expDate.getFullYear() - hariIni.getFullYear()) * 12 + (expDate.getMonth() - hariIni.getMonth());
+                if (hariIni.getDate() > expDate.getDate()) { sisaBulan--; }
+                if (tipeDokumen === "PP" || tipeDokumen.includes("PASPOR")) {
+                    if (sisaBulan < 18) { expiryDisplay = `<span class="text-danger fw-bold">${expiryDateStr}</span>`; }
+                } else {
+                    if (sisaBulan < 12) { expiryDisplay = `<span class="text-danger fw-bold">${expiryDateStr}</span>`; }
+                }
+            }
+
+            const indikatorFile = row[7] ? `<a href="${row[7]}" target="_blank" class="ms-2 text-success" title="Lihat Dokumen"><i class="bi bi-file-earmark-check-fill fs-5"></i></a>` : `<span class="ms-2 text-danger opacity-50" title="File belum diupload"><i class="bi bi-file-earmark-x-fill fs-5"></i></span>`;
+            htmlString += `<tr>
+                <td class="ps-3"><div class="d-flex align-items-center"><span class="fw-bold text-dark">${row[2] || '-'}</span>${indikatorFile}</div></td>
+                <td>${row[3] || '-'}</td><td>${row[4] || '-'}</td><td>${row[5] || '-'}</td><td>${expiryDisplay}</td>
+                <td class="text-center pe-3">
+                    <div class="d-flex justify-content-center gap-2">
+                        <button class="btn btn-sm btn-light text-warning shadow-sm border-0" onclick="bukaModalEditDoc('${row[0]}', '${row[1]}', '${row[2]}', '${row[3]}', '${row[4]}', '${row[5]}', '${row[6]}')" title="Edit Data"><i class="bi bi-pencil-square"></i></button>
+                        <button class="btn btn-sm btn-light text-danger shadow-sm border-0" onclick="hapusDoc('${row[0]}')" title="Hapus Dokumen"><i class="bi bi-trash-fill"></i></button>
+                    </div>
+                </td>
+            </tr>`;
+        });
+        tbody.innerHTML = htmlString;
+    }
+
+    // OPTIMASI: DOM Rendering
+    function renderTableSea(data) {
+        const tbody = document.getElementById('table-sea');
+        if(!tbody) return;
+        
+        if(data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Belum ada riwayat layar.</td></tr>';
+            return;
+        }
+        
+        let htmlString = '';
+        data.forEach(row => {
+            htmlString += `<tr>
+                <td class="ps-3 fw-bold">${row[2] || '-'}</td>
+                <td><span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-1">${row[10] || '-'}</span></td>
+                <td>${row[5] || '-'}</td><td>${row[6] || '-'}</td>
+                <td>${row[7] || '-'} <br><small class="text-muted">s/d</small> ${row[8] || '-'}</td>
+                <td class="fw-medium">${row[9] || '-'}</td>
+                <td class="text-center pe-3">
+                    <div class="d-flex justify-content-center gap-2">
+                        <button class="btn btn-sm btn-light text-warning shadow-sm border-0" onclick="bukaModalEditSea('${row[0]}','${row[2]}','${row[3]}','${row[4]}','${row[5]}','${row[6]}','${row[7]}','${row[8]}','${row[10]}')" title="Edit Data"><i class="bi bi-pencil-square"></i></button>
+                        <button class="btn btn-sm btn-light text-danger shadow-sm border-0" onclick="hapusSea('${row[0]}')" title="Hapus Data"><i class="bi bi-trash-fill"></i></button>
+                    </div>
+                </td>
+            </tr>`;
+        });
+        tbody.innerHTML = htmlString;
+    }
+
+    function formatTanggalExcel(str) {
+        if (!str || str === '-') return "";
+        str = str.toString().trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+        if (str.includes('/') || str.includes('-')) {
+            let separator = str.includes('/') ? '/' : '-';
+            let parts = str.split(separator);
+            if (parts.length === 3) {
+                if (parts[0].length === 4) { return parts[0] + "-" + parts[1] + "-" + parts[2]; } 
+                else { let y = parts[2]; if (y.length === 2) y = "20" + y; return y + "-" + parts[1].padStart(2, '0') + "-" + parts[0].padStart(2, '0'); }
+            }
+        }
+        const date = new Date(str);
+        if (!isNaN(date.getTime())) {
+            const offsetDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+            return offsetDate.toISOString().split('T')[0];
+        }
+        return "";
+    }
+
+    function hitungDurasiInternal(on, off) {
+        if (!on || !off) return "-";
+        const d1 = new Date(on); const d2 = new Date(off);
+        if (d2 < d1) return "Tgl Error";
+        let months = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+        let days = d2.getDate() - d1.getDate();
+        if (days < 0) { months--; days += new Date(d2.getFullYear(), d2.getMonth(), 0).getDate(); }
+        return (months > 0 ? months + " Bln " : "") + (days > 0 ? days + " Hari" : "");
+    }
+
+    function hapusKruUtama() {
+        Swal.fire({
+            title: 'Hapus Permanen?',
+            text: "AWAS! Apakah Anda yakin ingin menghapus kru dengan kode " + currentKodeCrew + "? Data tidak dapat dikembalikan!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: '<i class="bi bi-trash-fill"></i> Ya, Hapus Kru',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const btnHapus = document.getElementById('btn-delete-master');
+                btnHapus.innerHTML = "Menghapus..."; btnHapus.disabled = true;
+                google.script.run
+                    .withSuccessHandler(function(pesan) {
+                        alert(pesan); loadPage('CrewList'); loadDataCrew(); 
+                        btnHapus.innerHTML = "Hapus Kru"; btnHapus.disabled = false;
+                    })
+                    .withFailureHandler(function(error) {
+                        alert("Gagal menghapus: " + error.message);
+                        btnHapus.innerHTML = "Hapus Kru"; btnHapus.disabled = false;
+                    })
+                    .deleteCrewData(currentKodeCrew);
+            }
+        });
+    }
+
+    function bukaModalEdit() {
+        if(!currentCrewData || currentCrewData.length === 0) return;
+        const ddlJabatanAsli = document.getElementById('jabatan-dropdown'); const ddlStatusAsli = document.getElementById('status-dropdown');
+        if(ddlJabatanAsli) document.getElementById('edit_jabatan').innerHTML = ddlJabatanAsli.innerHTML;
+        if(ddlStatusAsli) document.getElementById('edit_status').innerHTML = ddlStatusAsli.innerHTML;
+
+        document.getElementById('edit_kode_crew').value = currentCrewData[0] || '';
+        document.getElementById('edit_nama_lengkap').value = currentCrewData[1] || '';
+        document.getElementById('edit_jabatan').value = currentCrewData[2] || '';
+        document.getElementById('edit_tempat_lahir').value = currentCrewData[3] || '';
+        document.getElementById('edit_tanggal_lahir').value = formatTanggalExcel(currentCrewData[4]);
+        document.getElementById('edit_telepon').value = currentCrewData[5] || '';
+        document.getElementById('edit_email').value = currentCrewData[6] || '';
+        document.getElementById('edit_asal_daerah').value = currentCrewData[7] || '';
+        
+        let nikBersih = currentCrewData[8] || '';
+        if(typeof nikBersih === 'string' && nikBersih.startsWith("'")) { nikBersih = nikBersih.substring(1); }
+        document.getElementById('edit_nik').value = nikBersih;
+        document.getElementById('edit_status').value = currentCrewData[12] || '';
+        document.getElementById('edit_skill').value = currentCrewData[14] || '';
+        document.getElementById('edit_tanggal_input').value = formatTanggalExcel(currentCrewData[16]);
+
+        new bootstrap.Modal(document.getElementById('modalEditCrew')).show();
+    }
+
+    const formEdit = document.getElementById('form-edit-crew');
+    if(formEdit) {
+        formEdit.addEventListener('submit', async function(e) {
+            e.preventDefault(); const form = this;
+            const emailEditValue = form.edit_email.value.trim().toLowerCase();
+            if (emailEditValue !== "" && !emailEditValue.includes("@gmail")) { alert("Gagal Update: Email harus menggunakan alamat @gmail!"); form.edit_email.focus(); return; }
+            const nikEditValue = form.edit_nik.value.trim();
+            if (nikEditValue !== "" && !/^\d{16}$/.test(nikEditValue)) { alert("Gagal Update: NIK KTP harus berupa angka dan berjumlah persis 16 digit!"); form.edit_nik.focus(); return; }
+
+            const btnSimpanEdit = document.getElementById('btn-simpan-edit');
+            btnSimpanEdit.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Mengunggah & Menyimpan...'; btnSimpanEdit.disabled = true;
+            
+            const payload = {
+                edit_kode_crew: form.edit_kode_crew.value, edit_nama_lengkap: form.edit_nama_lengkap.value, edit_jabatan: form.edit_jabatan.value,
+                edit_status: form.edit_status.value, edit_tempat_lahir: form.edit_tempat_lahir.value, edit_tanggal_lahir: form.edit_tanggal_lahir.value,
+                edit_telepon: form.edit_telepon.value, edit_email: form.edit_email.value, edit_asal_daerah: form.edit_asal_daerah.value,
+                edit_nik: form.edit_nik.value, edit_skill: form.edit_skill.value, edit_tanggal_input: form.edit_tanggal_input.value,
+                fileFotoName: "", fileFotoData: "", fileKtpName: "", fileKtpData: "", fileTtdName: "", fileTtdData: ""
+            };
+            const fileFoto = document.getElementById('edit_file_foto').files[0]; const fileKtp = document.getElementById('edit_file_ktp').files[0]; const fileTtd = document.getElementById('edit_file_ttd').files[0];
+
+            if (fileFoto) { payload.fileFotoName = fileFoto.name; payload.fileFotoData = await readFileAsBase64(fileFoto); }
+            if (fileKtp) { payload.fileKtpName = fileKtp.name; payload.fileKtpData = await readFileAsBase64(fileKtp); }
+            if (fileTtd) { payload.fileTtdName = fileTtd.name; payload.fileTtdData = await readFileAsBase64(fileTtd); }
+
+            google.script.run
+                .withSuccessHandler(function(pesan) {
+                    alert(pesan); form.reset(); bootstrap.Modal.getInstance(document.getElementById('modalEditCrew')).hide();
+                    lihatDetail(currentKodeCrew); loadDataCrew(); btnSimpanEdit.innerHTML = 'Update Data'; btnSimpanEdit.disabled = false;
+                })
+                .withFailureHandler(function(error) { alert("Gagal update: " + error.message); btnSimpanEdit.innerHTML = 'Update Data'; btnSimpanEdit.disabled = false; })
+                .updateCrewData(payload); 
+        });
+    }
+
+    function bukaModalFam() {
+        document.getElementById('fam_kode_crew').value = currentKodeCrew;
+        new bootstrap.Modal(document.getElementById('modalTambahFam')).show();
+    }
+
+    const formFam = document.getElementById('form-tambah-fam');
+    if(formFam) {
+        formFam.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const btnSimpanFam = document.getElementById('btn-simpan-fam');
+            btnSimpanFam.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Menyimpan...'; btnSimpanFam.disabled = true;
+
+            google.script.run
+                .withSuccessHandler(function(pesan) {
+                    alert(pesan); formFam.reset(); bootstrap.Modal.getInstance(document.getElementById('modalTambahFam')).hide();
+                    google.script.run.withSuccessHandler(renderTableFam).getRelatedData(currentKodeCrew, 'Crew_Fam');
+                    btnSimpanFam.innerHTML = 'Simpan Data'; btnSimpanFam.disabled = false;
+                })
+                .addFamilyData(this);
+        });
+    }
+
+    function bukaModalEditFam(id, nama, hub, tgl, telp, asal) {
+        document.getElementById('edit_fam_id').value = id; document.getElementById('edit_fam_nama').value = nama;
+        document.getElementById('edit_fam_hubungan').value = hub; document.getElementById('edit_fam_tgl').value = formatTanggalExcel(tgl);
+        document.getElementById('edit_fam_telp').value = telp; document.getElementById('edit_fam_asal').value = asal;
+        new bootstrap.Modal(document.getElementById('modalEditFam')).show();
+    }
+
+    document.getElementById('form-edit-fam').addEventListener('submit', function(e) {
+        e.preventDefault(); const btn = document.getElementById('btn-update-fam'); btn.disabled = true;
+        google.script.run.withSuccessHandler(function(res) {
+            alert(res); bootstrap.Modal.getInstance(document.getElementById('modalEditFam')).hide();
+            google.script.run.withSuccessHandler(renderTableFam).getRelatedData(currentKodeCrew, 'Crew_Fam'); btn.disabled = false;
+        }).updateFamilyData({
+            fam_id: this.fam_id.value, fam_nama: this.fam_nama.value, fam_hubungan: this.fam_hubungan.value,
+            fam_tgl_lahir: this.fam_tgl_lahir.value, fam_telepon: this.fam_telepon.value, fam_asal: this.fam_asal.value
+        });
+    });
+
+    function bukaModalSea() {
+        document.getElementById('bulk_sea_kode_crew').value = currentKodeCrew;
+        document.getElementById('excel_paste_sea').value = "";
+        document.getElementById('bulk_sea_table_body').innerHTML = '<tr><td colspan="9" class="text-center text-muted">Belum ada data di-paste</td></tr>';
+        new bootstrap.Modal(document.getElementById('modalTambahSea')).show();
+    }
+
+    document.getElementById('excel_paste_sea').addEventListener('paste', function(e) {
+        e.preventDefault();
+        const clipboardData = e.clipboardData || window.clipboardData; const pastedData = clipboardData.getData('Text');
+        const rows = pastedData.split(/\r?\n/).filter(row => row.trim() !== "");
+        const tableBody = document.getElementById('bulk_sea_table_body'); tableBody.innerHTML = '';
+        let optKapal = '<option value="">Pilih</option>'; listKapal.forEach(k => optKapal += `<option value="${k}">${k}</option>`);
+
+        rows.forEach((row) => {
+            const cols = row.split('\t');
+            if (cols.length >= 2) {
+                const tr = document.createElement('tr');
+                const tglOn = formatTanggalExcel(cols[5] || ''); const tglOff = formatTanggalExcel(cols[6] || '');
+                const durasi = hitungDurasiInternal(tglOn, tglOff);
+                tr.innerHTML = `
+                    <td><input type="text" class="form-control form-control-sm s-kapal" value="${cols[0] || ''}"></td>
+                    <td><select class="form-select form-select-sm s-jenis">${optKapal}</select></td>
+                    <td><input type="text" class="form-control form-control-sm s-bendera" value="${cols[1] || ''}"></td>
+                    <td><input type="text" class="form-control form-control-sm s-grt" value="${cols[2] || ''}"></td>
+                    <td><input type="text" class="form-control form-control-sm s-rank" value="${cols[3] || ''}"></td>
+                    <td><input type="text" class="form-control form-control-sm s-perush" value="${cols[4] || ''}"></td>
+                    <td><input type="date" class="form-control form-control-sm s-on" value="${tglOn}"></td>
+                    <td><input type="date" class="form-control form-control-sm s-off" value="${tglOff}"></td>
+                    <td><input type="text" class="form-control form-control-sm s-durasi bg-light" value="${durasi}" readonly></td>
+                `;
+                tableBody.appendChild(tr);
+            }
+        });
+    });
+
+    async function prosesSimpanSeaBulk() {
+        const btn = document.getElementById('btn-save-sea-bulk'); const rows = document.getElementById('bulk_sea_table_body').querySelectorAll('tr');
+        if (rows.length === 0 || rows[0].innerText.includes("Belum ada")) return alert("Data kosong!");
+
+        btn.disabled = true; btn.innerHTML = "Menyimpan...";
+        for (const tr of rows) {
+            const payload = {
+                sea_kode_crew: currentKodeCrew, sea_kapal: tr.querySelector('.s-kapal').value, sea_jenis_kapal: tr.querySelector('.s-jenis').value,
+                sea_bendera: tr.querySelector('.s-bendera').value, sea_grt: tr.querySelector('.s-grt').value, sea_rank: tr.querySelector('.s-rank').value,
+                sea_perusahaan: tr.querySelector('.s-perush').value, sea_on: tr.querySelector('.s-on').value, sea_off: tr.querySelector('.s-off').value
+            };
+            await new Promise(resolve => google.script.run.withSuccessHandler(resolve).addSeaServiceData(payload));
+        }
+        alert("Semua riwayat pengalaman berhasil disimpan!");
+        btn.disabled = false; btn.innerHTML = "Simpan Semua Pengalaman";
+        bootstrap.Modal.getInstance(document.getElementById('modalTambahSea')).hide();
+        google.script.run.withSuccessHandler(renderTableSea).getRelatedData(currentKodeCrew, 'Crew_SeaServices');
+    }
+
+    function bukaModalEditSea(id, kapal, bendera, grt, rank, perush, on, off, jenis) {
+        document.getElementById('edit_sea_id').value = id; document.getElementById('edit_sea_kapal').value = kapal;
+        document.getElementById('edit_sea_bendera').value = bendera; document.getElementById('edit_sea_grt').value = grt;
+        document.getElementById('edit_sea_rank').value = rank; document.getElementById('edit_sea_perush').value = perush;
+        document.getElementById('edit_sea_on').value = formatTanggalExcel(on); document.getElementById('edit_sea_off').value = formatTanggalExcel(off);
+        document.getElementById('edit_sea_jenis_kapal').value = jenis;
+        new bootstrap.Modal(document.getElementById('modalEditSea')).show();
+    }
+
+    document.getElementById('form-edit-sea').addEventListener('submit', function(e) {
+        e.preventDefault(); const btn = document.getElementById('btn-update-sea'); btn.disabled = true;
+        google.script.run.withSuccessHandler(function(res) {
+            alert(res); bootstrap.Modal.getInstance(document.getElementById('modalEditSea')).hide();
+            google.script.run.withSuccessHandler(renderTableSea).getRelatedData(currentKodeCrew, 'Crew_SeaServices'); btn.disabled = false;
+        }).updateSeaServiceData({
+            sea_id: this.sea_id.value, sea_kapal: this.sea_kapal.value, sea_jenis_kapal: this.sea_jenis_kapal.value,
+            sea_bendera: this.sea_bendera.value, sea_grt: this.sea_grt.value, sea_rank: this.sea_rank.value, 
+            sea_perusahaan: this.sea_perusahaan.value, sea_on: this.sea_on.value, sea_off: this.sea_off.value
+        });
+    });
+
+    function bukaModalManualSea() {
+        document.getElementById('man_sea_kode_crew').value = currentKodeCrew;
+        document.getElementById('form-manual-sea').reset();
+        new bootstrap.Modal(document.getElementById('modalManualSea')).show();
+    }
+
+    const formManualSea = document.getElementById('form-manual-sea');
+    if (formManualSea) {
+        formManualSea.addEventListener('submit', function(e) {
+            e.preventDefault(); const btn = document.getElementById('btn-save-man-sea'); btn.disabled = true;
+            const payload = {
+                sea_kode_crew: this.sea_kode_crew.value, sea_kapal: this.sea_kapal.value, sea_jenis_kapal: this.sea_jenis_kapal.value,
+                sea_bendera: this.sea_bendera.value, sea_grt: this.sea_grt.value, sea_rank: this.sea_rank.value, 
+                sea_perusahaan: this.sea_perusahaan.value, sea_on: this.sea_on.value, sea_off: this.sea_off.value
+            };
+            google.script.run.withSuccessHandler(function(res) {
+                alert(res); bootstrap.Modal.getInstance(document.getElementById('modalManualSea')).hide();
+                google.script.run.withSuccessHandler(renderTableSea).getRelatedData(currentKodeCrew, 'Crew_SeaServices'); btn.disabled = false;
+            }).addSeaServiceData(payload);
+        });
+    }
+
+    function bukaModalDoc() {
+        document.getElementById('bulk_doc_kode_crew').value = currentKodeCrew; document.getElementById('bulk_doc_files').value = "";
+        document.getElementById('excel_paste_area').value = ""; document.getElementById('bulk_doc_table_body').innerHTML = '<tr><td colspan="6" class="text-center text-muted">Belum ada file dipilih</td></tr>';
+        document.getElementById('upload_progress').innerText = "";
+        new bootstrap.Modal(document.getElementById('modalTambahDoc')).show();
+    }
+
+    document.getElementById('bulk_doc_files').addEventListener('change', function() {
+        const tableBody = document.getElementById('bulk_doc_table_body'); tableBody.innerHTML = '';
+        Array.from(this.files).forEach((file, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="small">${file.name}</td>
+                <td><input type="text" class="form-control form-control-sm in-tipe" value="${file.name.split('.')[0]}"></td>
+                <td><input type="text" class="form-control form-control-sm in-nomor"></td>
+                <td><input type="text" class="form-control form-control-sm in-tempat"></td>
+                <td><input type="date" class="form-control form-control-sm in-issued"></td>
+                <td><input type="date" class="form-control form-control-sm in-expiry"></td>
+            `;
+            tableBody.appendChild(tr);
+        });
+    });
+
+    document.getElementById('excel_paste_area').addEventListener('paste', function(e) {
+        e.preventDefault();
+        const clipboardData = e.clipboardData || window.clipboardData; const pastedData = clipboardData.getData('Text');
+        const rows = pastedData.split(/\r?\n/).filter(row => row.trim() !== "");
+        const inputTipe = document.querySelectorAll('.in-tipe'); const inputNomor = document.querySelectorAll('.in-nomor');
+        const inputTempat = document.querySelectorAll('.in-tempat'); const inputIssued = document.querySelectorAll('.in-issued');
+        const inputExpiry = document.querySelectorAll('.in-expiry');
+
+        rows.forEach((row, i) => {
+            if (inputTipe[i]) {
+                const cols = row.split('\t'); 
+                if (cols[0] !== undefined) inputTipe[i].value = cols[0].trim();
+                if (cols[1] !== undefined) inputNomor[i].value = cols[1].trim();
+                if (cols[2] !== undefined) inputTempat[i].value = cols[2].trim();
+                if (cols[3] !== undefined) inputIssued[i].value = formatTanggalExcel(cols[3]);
+                if (cols[4] !== undefined) inputExpiry[i].value = formatTanggalExcel(cols[4]);
+            }
+        });
+    });
+
+    // OPTIMASI: HTML5 Canvas Image Compression
+    function readFileAsBase64(file) {
+        return new Promise((resolve, reject) => {
+            if (!file.type.match(/image.*/)) {
+                const reader = new FileReader(); reader.onload = (e) => resolve(e.target.result); reader.readAsDataURL(file); return;
+            }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 1200; const MAX_HEIGHT = 1200;
+                    let width = img.width; let height = img.height;
+                    if (width > height) { if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; } } 
+                    else { if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; } }
+                    canvas.width = width; canvas.height = height;
+                    const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.6));
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function simpanSatuDokumen(payload) {
+        return new Promise((resolve, reject) => {
+            google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).addDocumentData(payload);
+        });
+    }
+
+    async function prosesSimpanBulk() {
+      const files = document.getElementById('bulk_doc_files').files; const kodeCrew = currentKodeCrew;
+      const btnSave = document.getElementById('btn-save-bulk'); const progressText = document.getElementById('upload_progress');
+      if (files.length === 0) return alert("Pilih file terlebih dahulu!");
+
+      btnSave.disabled = true;
+      const tipeDocs = document.querySelectorAll('.in-tipe'); const nomorDocs = document.querySelectorAll('.in-nomor');
+      const tempatDocs = document.querySelectorAll('.in-tempat'); const issuedDocs = document.querySelectorAll('.in-issued');
+      const expiryDocs = document.querySelectorAll('.in-expiry');
+
+      for (let i = 0; i < files.length; i++) {
+          progressText.innerText = `Mengunggah (${i + 1}/${files.length}): ${files[i].name}`;
+          const file = files[i]; const data = await readFileAsBase64(file);
+          const payload = {
+              doc_kode_crew: kodeCrew, doc_tipe: tipeDocs[i].value, doc_nomor: nomorDocs[i].value,
+              doc_tempat: tempatDocs[i].value, doc_issued: issuedDocs[i].value, doc_expiry: expiryDocs[i].value,
+              fileName: files[i].name, fileData: data
+          };
+          await simpanSatuDokumen(payload);
+      }
+
+      alert("Semua dokumen berhasil diunggah!");
+      
+      // --- PERBAIKAN: RESET FORM SETELAH SELESAI ---
+      btnSave.disabled = false; 
+      progressText.innerText = "";
+      
+      document.getElementById('bulk_doc_files').value = "";
+      document.getElementById('excel_paste_area').value = "";
+      document.getElementById('bulk_doc_table_body').innerHTML = '<tr><td colspan="6" class="text-center text-muted">Belum ada file dipilih</td></tr>';
+      
+      bootstrap.Modal.getInstance(document.getElementById('modalTambahDoc')).hide();
+      
+      // Refresh tabel dokumen
+      google.script.run.withSuccessHandler(renderTableDoc).getRelatedData(currentKodeCrew, 'Crew_Doc');
+  }
+
+    function bukaModalManualDoc() {
+        document.getElementById('man_doc_kode_crew').value = currentKodeCrew;
+        document.getElementById('form-manual-doc').reset();
+        new bootstrap.Modal(document.getElementById('modalManualDoc')).show();
+    }
+
+    const formManDoc = document.getElementById('form-manual-doc');
+    if(formManDoc) {
+        formManDoc.addEventListener('submit', function(e) {
+            e.preventDefault(); const btn = document.getElementById('btn-save-man'); btn.disabled = true; btn.innerText = "Menyimpan...";
+            const payload = {
+                doc_kode_crew: document.getElementById('man_doc_kode_crew').value, doc_tipe: this.doc_tipe.value,
+                doc_nomor: this.doc_nomor.value, doc_tempat: this.doc_tempat.value, doc_issued: this.doc_issued.value,
+                doc_expiry: this.doc_expiry.value, fileName: "", fileData: ""  
+            };
+            google.script.run
+                .withSuccessHandler(function(pesan) {
+                    alert(pesan); btn.disabled = false; btn.innerText = "Simpan Data";
+                    bootstrap.Modal.getInstance(document.getElementById('modalManualDoc')).hide();
+                    google.script.run.withSuccessHandler(renderTableDoc).getRelatedData(currentKodeCrew, 'Crew_Doc');
+                })
+                .addDocumentData(payload);
+        });
+    }
+
+    function bukaModalEditDoc(id, kode, tipe, nomor, tempat, issued, expiry) {
+        document.getElementById('edit_doc_id').value = id; document.getElementById('edit_doc_kode_crew').value = kode;
+        document.getElementById('edit_doc_tipe').value = tipe; document.getElementById('edit_doc_nomor').value = nomor;
+        document.getElementById('edit_doc_tempat').value = tempat; document.getElementById('edit_doc_issued').value = formatTanggalExcel(issued);
+        document.getElementById('edit_doc_expiry').value = formatTanggalExcel(expiry); document.getElementById('edit_doc_file').value = ""; 
+        new bootstrap.Modal(document.getElementById('modalEditDoc')).show();
+    }
+
+    const formEditDoc = document.getElementById('form-edit-doc');
+    if(formEditDoc) {
+        formEditDoc.addEventListener('submit', async function(e) {
+            e.preventDefault(); const btn = document.getElementById('btn-update-doc'); btn.disabled = true; btn.innerText = "Memproses...";
+            const fileInput = document.getElementById('edit_doc_file'); const file = fileInput.files[0];
+            const payload = {
+                doc_id: document.getElementById('edit_doc_id').value, doc_kode_crew: document.getElementById('edit_doc_kode_crew').value,
+                doc_tipe: document.getElementById('edit_doc_tipe').value, doc_nomor: document.getElementById('edit_doc_nomor').value,
+                doc_tempat: document.getElementById('edit_doc_tempat').value, doc_issued: document.getElementById('edit_doc_issued').value,
+                doc_expiry: document.getElementById('edit_doc_expiry').value, fileName: "", fileData: ""
+            };
+            if (file) {
+                payload.fileName = file.name;
+                payload.fileData = await readFileAsBase64(file);
+                kirimUpdateKeServer(payload, btn);
+            } else { kirimUpdateKeServer(payload, btn); }
+        });
+    }
+
+    function kirimUpdateKeServer(payload, btn) {
+        google.script.run
+            .withSuccessHandler(function(pesan) {
+                alert(pesan); btn.disabled = false; btn.innerText = "Update Dokumen";
+                bootstrap.Modal.getInstance(document.getElementById('modalEditDoc')).hide();
+                google.script.run.withSuccessHandler(renderTableDoc).getRelatedData(currentKodeCrew, 'Crew_Doc');
+            })
+            .withFailureHandler(function(err) { alert("Error: " + err.message); btn.disabled = false; btn.innerText = "Update Dokumen"; })
+            .updateDocumentData(payload);
+    }
+
+    function hapusFam(id) {
+        Swal.fire({
+            title: 'Hapus Data Keluarga?',
+            text: "Apakah Anda yakin ingin menghapus data keluarga ini?",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Ya, Hapus',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                google.script.run
+                    .withSuccessHandler(function(pesan) {
+                        alert(pesan); google.script.run.withSuccessHandler(renderTableFam).getRelatedData(currentKodeCrew, 'Crew_Fam');
+                    })
+                    .withFailureHandler(function(err) { alert("Gagal menghapus: " + err.message); })
+                    .deleteFamilyData(id);
+            }
+        });
+    }
+
+    function hapusDoc(id) {
+        Swal.fire({
+            title: 'Hapus Dokumen?',
+            text: "AWAS! Yakin menghapus dokumen ini? Jika ada file scan, akan masuk ke Trash Google Drive.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Ya, Hapus Dokumen',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                google.script.run
+                    .withSuccessHandler(function(pesan) {
+                        alert(pesan); google.script.run.withSuccessHandler(renderTableDoc).getRelatedData(currentKodeCrew, 'Crew_Doc');
+                    })
+                    .withFailureHandler(function(err) { alert("Gagal menghapus: " + err.message); })
+                    .deleteDocumentData(id);
+            }
+        });
+    }
+
+    function hapusSea(id) {
+        Swal.fire({
+            title: 'Hapus Riwayat Layar?',
+            text: "Apakah Anda yakin ingin menghapus riwayat pengalaman ini?",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Ya, Hapus Riwayat',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                google.script.run
+                    .withSuccessHandler(function(pesan) {
+                        alert(pesan); google.script.run.withSuccessHandler(renderTableSea).getRelatedData(currentKodeCrew, 'Crew_SeaServices');
+                    })
+                    .withFailureHandler(function(err) { alert("Gagal menghapus: " + err.message); })
+                    .deleteSeaServiceData(id);
+            }
+        });
+    }
+
+    function bukaModalCetakTandaTerima() {
+        const btn = document.getElementById('btn-generate-pdf'); btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Memuat Nomor...'; btn.disabled = true;
+        google.script.run
+            .withSuccessHandler(function(res) {
+                document.getElementById('cetak_angka_urut').value = res.angkaUrut; document.getElementById('cetak_nomor_surat').value = res.nomorLengkap;
+                document.getElementById('cetak_id_kop').value = "1xAPtnbZBBtFIrN4VEqnwvRk0OfAfQnjN";
+                btn.innerHTML = 'Download PDF'; btn.disabled = false;
+            })
+            .withFailureHandler(function(err) { alert("Gagal mengambil nomor surat: " + err.message); })
+            .getNomorSuratBaru();
+        new bootstrap.Modal(document.getElementById('modalCetakPDF')).show();
+    }
+
+    function prosesCetakPDF() {
+        const btn = document.getElementById('btn-generate-pdf'); btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Membuat PDF...'; btn.disabled = true;
+        const nomorSurat = document.getElementById('cetak_nomor_surat').value; const angkaUrut = document.getElementById('cetak_angka_urut').value;
+        const idKop = document.getElementById('cetak_id_kop').value.trim();
+
+        google.script.run
+            .withSuccessHandler(function(downloadUrl) {
+                alert("PDF Berhasil dibuat! File akan otomatis didownload."); window.open(downloadUrl, '_blank');
+                bootstrap.Modal.getInstance(document.getElementById('modalCetakPDF')).hide();
+                btn.innerHTML = 'Download PDF'; btn.disabled = false;
+            })
+            .withFailureHandler(function(err) { alert("Terjadi kesalahan saat membuat PDF: " + err.message); btn.innerHTML = 'Download PDF'; btn.disabled = false; })
+            .generatePDFTandaTerima(currentKodeCrew, nomorSurat, angkaUrut, idKop);
+    }
+
+    function bukaModalCetakCV() {
+        document.getElementById('cv_id_kop').value = "1xAPtnbZBBtFIrN4VEqnwvRk0OfAfQnjN";
+        new bootstrap.Modal(document.getElementById('modalCetakCV')).show();
+    }
+
+    function prosesCetakCV() {
+        const btn = document.getElementById('btn-generate-cv'); btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Menyusun CV...'; btn.disabled = true;
+        const idKop = document.getElementById('cv_id_kop').value.trim();
+
+        google.script.run
+            .withSuccessHandler(function(downloadUrl) {
+                alert("CV Berhasil dibuat! File akan otomatis didownload."); window.open(downloadUrl, '_blank');
+                bootstrap.Modal.getInstance(document.getElementById('modalCetakCV')).hide();
+                btn.innerHTML = 'Buat CV PDF'; btn.disabled = false;
+            })
+            .withFailureHandler(function(err) { alert("Gagal membuat CV: " + err.message); btn.innerHTML = 'Buat CV PDF'; btn.disabled = false; })
+            .generateCVPDF(currentKodeCrew, idKop);
+    }
+
+    // ==========================================
+    // JS UNTUK TOMBOL DOWNLOAD ZIP
+    // ==========================================
+    function prosesDownloadZipDokumen() {
+        const btn = document.getElementById('btn-download-zip');
+        if(btn) {
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Menyiapkan ZIP...';
+            btn.disabled = true;
+        }
+
+        google.script.run
+            .withSuccessHandler(function(downloadUrl) {
+                alert("File ZIP berhasil disatukan! Download akan segera dimulai.");
+                window.open(downloadUrl, '_blank');
+                
+                if(btn) {
+                    btn.innerHTML = '<i class="bi bi-file-earmark-zip-fill"></i> Download ZIP Dokumen';
+                    btn.disabled = false;
+                }
+            })
+            .withFailureHandler(function(err) {
+                alert("Gagal membuat ZIP: " + err.message);
+                if(btn) {
+                    btn.innerHTML = '<i class="bi bi-file-earmark-zip-fill"></i> Download ZIP Dokumen';
+                    btn.disabled = false;
+                }
+            })
+            .generateZipDokumenKru(currentKodeCrew);
+    }
+
+    // ==========================================
+    // LOGIKA DEPLOYMENT (ONBOARD / SIGN OFF)
+    // ==========================================
+    
+    function bukaModalOnboard() {
+        document.getElementById('form-onboard').reset();
+        
+        // Auto-fill tanggal hari ini & rank kru saat ini
+        const today = new Date();
+        const yyyyMm = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, '0');
+        
+        document.getElementById('dep_tgl_onboard').value = today.toISOString().split('T')[0];
+        document.getElementById('dep_bulan_lapor_on').value = yyyyMm;
+        document.getElementById('dep_rank').value = currentCrewData[2] || ''; // Ambil jabatan dari profil
+
+        new bootstrap.Modal(document.getElementById('modalProsesOnboard')).show();
+    }
+
+    function bukaModalSignOff() {
+        document.getElementById('form-sign-off').reset();
+        
+        const today = new Date();
+        const yyyyMm = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, '0');
+        
+        document.getElementById('dep_tgl_signoff').value = today.toISOString().split('T')[0];
+        document.getElementById('dep_bulan_lapor_off').value = yyyyMm;
+
+        new bootstrap.Modal(document.getElementById('modalProsesSignOff')).show();
+    }
+
+    // Listener Form Onboard
+    const formOnboard = document.getElementById('form-onboard');
+    if(formOnboard) {
+        formOnboard.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btn-submit-onboard');
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Memproses...';
+            btn.disabled = true;
+
+            const payload = {
+                kode_crew: currentKodeCrew,
+                tgl_onboard: document.getElementById('dep_tgl_onboard').value,
+                bulan_laporan: document.getElementById('dep_bulan_lapor_on').value,
+                kapal: document.getElementById('dep_kapal').value,
+                perusahaan: document.getElementById('dep_perusahaan').value,
+                rank: document.getElementById('dep_rank').value,
+                bendera: document.getElementById('dep_bendera').value,
+                grt: document.getElementById('dep_grt').value,
+                negara_tujuan: document.getElementById('dep_negara').value
+            };
+
+            google.script.run
+                .withSuccessHandler(function(pesan) {
+                    alert(pesan);
+                    bootstrap.Modal.getInstance(document.getElementById('modalProsesOnboard')).hide();
+                    btn.innerHTML = '<i class="bi bi-check2-circle"></i> Berangkatkan';
+                    btn.disabled = false;
+                    lihatDetail(currentKodeCrew); // Refresh profil agar status berubah
+                })
+                .withFailureHandler(function(err){ alert("Error: " + err.message); btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle"></i> Berangkatkan';})
+                .prosesMutasiOnboard(payload);
+        });
+    }
+
+    // Listener Form Sign Off
+    const formSignOff = document.getElementById('form-sign-off');
+    if(formSignOff) {
+        formSignOff.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btn-submit-signoff');
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Memproses...';
+            btn.disabled = true;
+
+            const payload = {
+                kode_crew: currentKodeCrew,
+                tgl_signoff: document.getElementById('dep_tgl_signoff').value,
+                bulan_laporan: document.getElementById('dep_bulan_lapor_off').value,
+                keterangan: document.getElementById('dep_keterangan').value
+            };
+
+            google.script.run
+                .withSuccessHandler(function(pesan) {
+                    alert(pesan);
+                    bootstrap.Modal.getInstance(document.getElementById('modalProsesSignOff')).hide();
+                    btn.innerHTML = '<i class="bi bi-check2-circle"></i> Proses Turun Kapal';
+                    btn.disabled = false;
+                    lihatDetail(currentKodeCrew); // Refresh profil
+                })
+                .withFailureHandler(function(err){ alert("Error: " + err.message); btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle"></i> Proses Turun Kapal';})
+                .prosesMutasiSignOff(payload);
+        });
+    }
+</script>

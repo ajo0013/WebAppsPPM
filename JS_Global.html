@@ -1,0 +1,176 @@
+<script>
+    // ==========================================
+    // SIHIR UPGRADE NOTIFIKASI (SWEETALERT2)
+    // ==========================================
+    window.alert = function(pesan) {
+        let tipeIcon = 'success';
+        let judulText = 'Berhasil!';
+        
+        // Deteksi cerdas: Jika ada kata "error" atau "gagal", ubah jadi warna merah (Error)
+        if (pesan.toLowerCase().includes('error') || pesan.toLowerCase().includes('gagal')) {
+            tipeIcon = 'error';
+            judulText = 'Oops, Terjadi Kesalahan!';
+        } 
+        // Deteksi cerdas: Jika ada peringatan kosong, ubah jadi warna kuning (Warning)
+        else if (pesan.toLowerCase().includes('tidak ada') || pesan.toLowerCase().includes('harap') || pesan.toLowerCase().includes('belum')) {
+            tipeIcon = 'warning';
+            judulText = 'Perhatian';
+        }
+
+        Swal.fire({
+            title: judulText,
+            text: pesan,
+            icon: tipeIcon,
+            confirmButtonColor: '#4361ee', // Warna biru corporate Anda
+            confirmButtonText: '<i class="bi bi-check-circle"></i> Tutup',
+            customClass: {
+                popup: 'rounded-4 shadow-lg border-0'
+            },
+            showClass: {
+                popup: 'animate__animated animate__fadeInDown animate__faster'
+            },
+            hideClass: {
+                popup: 'animate__animated animate__fadeOutUp animate__faster'
+            }
+        });
+    };
+
+    function loadPage(pageName) {
+        // Sembunyikan semua halaman
+        const allPages = document.querySelectorAll('.page-view');
+        allPages.forEach(page => {
+            page.style.display = 'none';
+        });
+
+        // Munculkan halaman yang dituju
+        const selectedPage = document.getElementById('view-' + pageName);
+        if(selectedPage) {
+            selectedPage.style.display = 'block';
+        }
+
+        // Panggil data otomatis saat halaman tertentu dibuka
+        if (pageName === 'Blacklist' && typeof loadBlacklistData === 'function') {
+            loadBlacklistData();
+        }
+        if (pageName === 'CrewList' && typeof loadDataCrew === 'function') {
+            loadDataCrew();
+        }
+
+        // Update indikator menu aktif di Sidebar
+        try {
+            if(window.event && window.event.target.classList.contains('list-group-item')) {
+                document.querySelectorAll('.list-group-item').forEach(link => link.classList.remove('active-nav'));
+                window.event.target.classList.add('active-nav');
+            }
+        } catch(e) {
+            // Abaikan jika error
+        }
+    }
+
+    // ==========================================
+  // MESIN KOP SURAT GLOBAL & UTILITIES PDF
+  // ==========================================
+  
+  let globalKopSuratBase64 = null;
+  let proporsiKop = 1; // Variabel baru penyimpan rasio asli gambar
+
+  // Tarik gambar diam-diam dan hitung proporsinya
+  window.addEventListener('load', function() {
+    google.script.run
+      .withSuccessHandler(function(base64Image) {
+        globalKopSuratBase64 = base64Image;
+        
+        // Buat image virtual untuk membaca ukuran asli agar tidak gepeng
+        let img = new Image();
+        img.onload = function() {
+           proporsiKop = img.width / img.height; // Lebar dibagi Tinggi
+        };
+        img.src = base64Image;
+      })
+      .getKopSuratBase64();
+  });
+
+  /**
+   * Fungsi Global untuk menggambar Kop Surat di PDF manapun.
+   */
+  function cetakKopSuratGlobal(doc, orientasi = 'landscape') {
+    let pageWidth = orientasi === 'landscape' ? 297 : 210;
+    let rightMargin = orientasi === 'landscape' ? 287 : 200;
+    
+    if (globalKopSuratBase64) {
+      // Atur lebar gambar ke 180mm (ukuran standar elegan, tidak terlalu memenuhi kertas)
+      let imgWidth = 180; 
+      
+      // Hitung tinggi secara otomatis berdasarkan proporsi asli!
+      let imgHeight = imgWidth / proporsiKop; 
+      
+      // Posisikan X di tengah kertas (Center)
+      let xPos = (pageWidth - imgWidth) / 2;
+      let yPos = 5;
+      
+      // Cetak gambar tanpa merusak proporsi
+      doc.addImage(globalKopSuratBase64, xPos, yPos, imgWidth, imgHeight); 
+      
+      // Buat garis pembatas tepat di bawah gambar
+      let yGaris = yPos + imgHeight + 3;
+      doc.setLineWidth(0.5);
+      doc.line(10, yGaris, rightMargin, yGaris); 
+      
+      return yGaris + 8; // Mengembalikan titik Y untuk mulai konten
+      
+    } else {
+      // Fallback jika gambar gagal diload
+      doc.setFontSize(16); doc.setFont("helvetica", "bold");
+      doc.text("PT. PANCA PASIFIK MANDIRI", pageWidth / 2, 15, { align: "center" });
+      
+      doc.setFontSize(10); doc.setFont("helvetica", "normal");
+      doc.text("Manning Agency & Crew Management", pageWidth / 2, 21, { align: "center" });
+      doc.text("Padma Hills D7-31, Gunung Sindur, Bogor, Jawa Barat", pageWidth / 2, 26, { align: "center" });
+      
+      doc.setLineWidth(0.5); doc.line(10, 30, rightMargin, 30);
+      return 40; 
+    }
+  }
+
+  // ==========================================
+  // SISTEM AUTO-LOGOUT (SESI BERAKHIR)
+  // ==========================================
+  let timeoutSesi;
+  const WAKTU_LOGOUT_MS = 15 * 60 * 1000; // 15 menit tanpa aktivitas
+
+  function mulaiAutoLogout() {
+      resetTimerSesi();
+      // Sistem mendeteksi jika user menggerakkan mouse, mengetik, atau klik
+      document.addEventListener('mousemove', resetTimerSesi);
+      document.addEventListener('keypress', resetTimerSesi);
+      document.addEventListener('click', resetTimerSesi);
+      document.addEventListener('scroll', resetTimerSesi, true);
+  }
+
+  function resetTimerSesi() {
+      clearTimeout(timeoutSesi);
+      timeoutSesi = setTimeout(kunciLayarSesiHabis, WAKTU_LOGOUT_MS);
+  }
+
+  function kunciLayarSesiHabis() {
+      // Matikan deteksi aktivitas agar timer tidak jalan lagi
+      document.removeEventListener('mousemove', resetTimerSesi);
+      document.removeEventListener('keypress', resetTimerSesi);
+      document.removeEventListener('click', resetTimerSesi);
+      document.removeEventListener('scroll', resetTimerSesi, true);
+
+      // Munculkan kembali layar login penuh yang tidak bisa ditutup
+      const loginScreen = document.getElementById('login-screen');
+      if (loginScreen) {
+          loginScreen.style.display = 'flex';
+          document.getElementById('login-body').innerHTML = `
+              <i class="bi bi-clock-history text-warning" style="font-size: 3.5rem;"></i>
+              <h5 class="fw-bold text-dark mt-3">Sesi Anda Berakhir</h5>
+              <p class="text-muted">Layar dikunci otomatis karena tidak ada aktivitas selama 15 menit.</p>
+              <button class="btn btn-primary fw-bold px-4 py-2 mt-3 shadow-sm" onclick="location.reload()">
+                <i class="bi bi-arrow-clockwise"></i> Muat Ulang & Login Kembali
+              </button>
+          `;
+      }
+  }
+</script>

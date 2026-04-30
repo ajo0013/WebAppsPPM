@@ -1,0 +1,486 @@
+<script>
+    // ==========================================
+    // JS CLIENT: SIRKULASI DOKUMEN (OPTIMIZED)
+    // ==========================================
+
+    // Membuka Popup Peminjaman / Penarikan (Bisa Diketik)
+    function bukaModalPinjam() {
+        Swal.fire({
+            title: '<i class="bi bi-box-arrow-up-right text-warning"></i> Sirkulasi Dokumen Keluar',
+            width: '600px',
+            html: `
+                <div class="text-start">
+                    <label class="fw-bold small mb-1">Cari Nama Kru (Standby/Plotting) <span class="text-danger">*</span></label>
+                    <input type="text" id="swal-kru-input" list="list-kru" class="form-control mb-3 border-primary" placeholder="Ketik nama atau kode kru lalu tekan Enter/Pilih..." onchange="if(this.value.includes(' - ')) loadDokumenKru(this.value)">
+                    <datalist id="list-kru"></datalist>
+
+                    <label class="fw-bold small mb-1">Pilih Jenis Transaksi <span class="text-danger">*</span></label>
+                    <select id="swal-aksi" class="form-select mb-3 bg-light" onchange="toggleAutoSelect(this.value)">
+                        <option value="Pinjam Sementara">Pinjam Sementara (Hanya beberapa)</option>
+                        <option value="Penarikan Total">Penarikan Total (Ambil Semua & Resign)</option>
+                    </select>
+
+                    <div id="container-pilihan-doc">
+                        <label class="fw-bold small mb-1">Pilih Dokumen yang Diambil <span class="text-danger">*</span></label>
+                        <div id="swal-dokumen-container" class="p-3 border rounded shadow-sm bg-white mb-3" style="max-height: 200px; overflow-y: auto;">
+                            <span class="text-muted small">Ketik lalu pilih kru dari daftar di atas untuk memunculkan dokumen...</span>
+                        </div>
+                    </div>
+
+                    <div id="info-penarikan-total" class="alert alert-danger py-2 mb-3" style="display:none;">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i> <strong>Penarikan Total:</strong> Semua dokumen akan otomatis ditandai keluar dan status kru akan menjadi <b>TANPA BERKAS</b>.
+                    </div>
+
+                    <label class="fw-bold small mb-1">Alasan Penarikan / Peminjaman <span class="text-danger">*</span></label>
+                    <textarea id="swal-alasan" class="form-control" rows="2" placeholder="Alasan..."></textarea>
+                </div>
+            `,
+            didOpen: () => {
+                google.script.run.withSuccessHandler(res => {
+                    let opt = '';
+                    res.forEach(k => { opt += `<option value="${k.kode} - ${k.nama}">`; });
+                    document.getElementById('list-kru').innerHTML = opt;
+                }).getListKruSirkulasi();
+            },
+            showCancelButton: true,
+            confirmButtonText: 'Proses Transaksi',
+            preConfirm: () => {
+                const inputValue = document.getElementById('swal-kru-input').value;
+                const aksi = document.getElementById('swal-aksi').value;
+                const alasan = document.getElementById('swal-alasan').value;
+
+                if (!inputValue.includes(' - ')) { Swal.showValidationMessage('Pilih kru dari daftar!'); return false; }
+                
+                const kode = inputValue.split(' - ')[0].trim();
+                const namaKru = inputValue.split(' - ')[1].trim();
+
+                let checkedDocs = [];
+                if (aksi === "Penarikan Total") {
+                    document.querySelectorAll('.doc-checkbox').forEach(cb => checkedDocs.push(cb.value));
+                    if (checkedDocs.length === 0) {
+                        checkedDocs.push("Penarikan Status / Seluruh Berkas Tersisa");
+                    }
+                } else {
+                    document.querySelectorAll('.doc-checkbox:checked').forEach(cb => checkedDocs.push(cb.value));
+                }
+
+                if (!alasan) {
+                    Swal.showValidationMessage('Harap isi alasan penarikan/peminjaman!'); return false;
+                }
+                if (aksi === "Pinjam Sementara" && checkedDocs.length === 0) {
+                    Swal.showValidationMessage('Harap pilih minimal 1 dokumen untuk dipinjam!'); return false;
+                }
+
+                return { kode: kode, nama: namaKru, aksi: aksi, alasan: alasan, dokumen: checkedDocs.join(', ') };
+            }
+        }).then(result => {
+            if (result.isConfirmed) {
+                // SUNTIKAN LOADING SCREEN
+                Swal.fire({
+                    title: 'Memproses Transaksi...',
+                    text: 'Mohon tunggu, sistem sedang mencatat ke log dokumen.',
+                    allowOutsideClick: false,
+                    didOpen: () => { Swal.showLoading(); }
+                });
+
+                google.script.run.withSuccessHandler(res => {
+                    Swal.fire('Berhasil!', res, 'success');
+                    muatRiwayatDokumen();
+                }).withFailureHandler(err => {
+                    Swal.fire('Gagal', err.message, 'error');
+                }).prosesSirkulasiKeluar(result.value);
+            }
+        });
+    }
+
+    // Fungsi Pembantu untuk Toggle UI
+    window.toggleAutoSelect = function(aksi) {
+        const docContainer = document.getElementById('container-pilihan-doc');
+        const infoBox = document.getElementById('info-penarikan-total');
+        const checkboxes = document.querySelectorAll('.doc-checkbox');
+
+        if (aksi === "Penarikan Total") {
+            docContainer.style.display = 'none'; // Sembunyikan checklist
+            infoBox.style.display = 'block';     // Munculkan peringatan merah
+            checkboxes.forEach(cb => cb.checked = true); // Centang semua di balik layar
+        } else {
+            docContainer.style.display = 'block';
+            infoBox.style.display = 'none';
+            checkboxes.forEach(cb => cb.checked = false); // Kosongkan lagi
+        }
+    }
+
+    // ==========================================
+    // POPUP PENGEMBALIAN DOKUMEN
+    // ==========================================
+    function bukaModalKembali() {
+        Swal.fire({
+            title: '<i class="bi bi-arrow-repeat text-success"></i> Smart Return Documents',
+            width: '800px',
+            html: `
+                <div class="text-start">
+                    <label class="fw-bold small mb-2">1. Pilih Kru</label>
+                    <select id="swal-kru-kembali" class="form-select mb-3 border-success" onchange="loadDokumenPinjaman(this.value)">
+                        <option value="">-- Mencari data pinjaman... --</option>
+                    </select>
+
+                    <div id="swal-kembali-master-container" style="display:none;">
+                        <label class="fw-bold small mb-2">2. Checklist & Update Data (Jika ada perubahan)</label>
+                        <div id="swal-kembali-list" class="accordion shadow-sm mb-3">
+                            </div>
+                    </div>
+                    
+                    <input type="hidden" id="swal-trx-ids" value="">
+                </div>
+            `,
+            didOpen: () => {
+                google.script.run.withSuccessHandler(res => {
+                    let opt = '<option value="">-- Pilih Kru --</option>';
+                    res.forEach(k => { opt += `<option value="${k.kode}">${k.kode} - ${k.nama}</option>`; });
+                    document.getElementById('swal-kru-kembali').innerHTML = opt;
+                }).getListKruPinjam();
+            },
+            showCancelButton: true,
+            confirmButtonText: 'Proses & Update Database',
+            preConfirm: () => {
+                const kode = document.getElementById('swal-kru-kembali').value;
+                const trxIds = document.getElementById('swal-trx-ids').value;
+                const updateList = [];
+                
+                // Ambil data dari setiap form dokumen yang terbuka
+                document.querySelectorAll('.doc-return-item').forEach(item => {
+                    const tipe = item.getAttribute('data-tipe');
+                    updateList.push({
+                        tipe: tipe,
+                        nomor: item.querySelector('.in-nomor').value,
+                        tempat: item.querySelector('.in-tempat').value,
+                        issued: item.querySelector('.in-issued').value,
+                        expiry: item.querySelector('.in-expiry').value
+                    });
+                });
+
+                if (updateList.length === 0) {
+                    Swal.showValidationMessage('Pilih kru dan pastikan dokumen terdeteksi!');
+                    return false;
+                }
+
+                return { 
+                    kode: kode, 
+                    nama: document.getElementById('swal-kru-kembali').options[document.getElementById('swal-kru-kembali').selectedIndex].text.split(' - ')[1],
+                    trxIds: trxIds,
+                    updateList: updateList
+                };
+            }
+        }).then(result => {
+            if (result.isConfirmed) {
+                // SUNTIKAN LOADING SCREEN
+                Swal.fire({
+                    title: 'Memproses Pengembalian...',
+                    text: 'Sistem sedang memperbarui database dokumen di brankas.',
+                    allowOutsideClick: false,
+                    didOpen: () => { Swal.showLoading(); }
+                });
+
+                google.script.run.withSuccessHandler(res => {
+                    Swal.fire('Sukses!', res, 'success');
+                    muatRiwayatDokumen();
+                }).withFailureHandler(err => {
+                    Swal.fire('Gagal', err.message, 'error');
+                }).prosesSirkulasiKembali(result.value);
+            }
+        });
+    }
+
+    // ==========================================
+    // FUNGSI LOAD DOKUMEN YANG SEDANG DIPINJAM
+    // ==========================================
+    window.loadDokumenPinjaman = function(kode) {
+        const listDiv = document.getElementById('swal-kembali-list');
+        const masterContainer = document.getElementById('swal-kembali-master-container');
+        
+        if (!kode) { masterContainer.style.display = 'none'; return; }
+
+        listDiv.innerHTML = '<div class="p-3 text-center"><div class="spinner-border spinner-border-sm text-success"></div> Memuat detail dokumen...</div>';
+        masterContainer.style.display = 'block';
+
+        google.script.run.withSuccessHandler(res => {
+            document.getElementById('swal-trx-ids').value = res.trxIds;
+            let html = '';
+            
+            // SABUK PENGAMAN JIKA DOKUMEN KOSONG/TIDAK KETEMU
+            if (!res.dokumen || res.dokumen.length === 0) {
+                listDiv.innerHTML = '<div class="alert alert-danger m-0 small"><i class="bi bi-exclamation-triangle-fill"></i> Error: Gagal menarik rincian dokumen dari log. Pastikan status di Excel memang "Sedang Dipinjam".</div>';
+                return;
+            }
+            
+            res.dokumen.forEach((doc, i) => {
+                html += `
+                <div class="accordion-item doc-return-item" data-tipe="${doc.tipe}">
+                    <h2 class="accordion-header">
+                        <div class="accordion-button bg-light py-2 px-3" style="cursor:default">
+                            <i class="bi bi-file-earmark-check-fill text-success me-2"></i> 
+                            <span class="fw-bold small text-dark">${doc.tipe}</span>
+                        </div>
+                    </h2>
+                    <div class="accordion-collapse collapse show">
+                        <div class="accordion-body bg-white border-top p-3">
+                            <div class="row g-2">
+                                <div class="col-6">
+                                    <label class="small fw-bold">Nomor</label>
+                                    <input type="text" class="form-control form-control-sm in-nomor" value="${doc.nomor}">
+                                </div>
+                                <div class="col-6">
+                                    <label class="small fw-bold">Tempat Terbit</label>
+                                    <input type="text" class="form-control form-control-sm in-tempat" value="${doc.tempat}">
+                                </div>
+                                <div class="col-6">
+                                    <label class="small fw-bold">Issued</label>
+                                    <input type="date" class="form-control form-control-sm in-issued" value="${formatTgl(doc.issued)}">
+                                </div>
+                                <div class="col-6">
+                                    <label class="small fw-bold">Expiry</label>
+                                    <input type="date" class="form-control form-control-sm in-expiry" value="${formatTgl(doc.expiry)}">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            });
+            listDiv.innerHTML = html;
+        }).getDokumenDipinjam(kode);
+    }
+
+    // 3. FUNGSI LOAD DOKUMEN KRU (DIPANGGIL SAAT INPUT DIISI)
+    window.loadDokumenKru = function(inputValue) {
+        const container = document.getElementById('swal-dokumen-container');
+        if (!inputValue || !inputValue.includes(' - ')) { 
+            container.innerHTML = '<span class="text-muted small">Pilih kru yang valid dari saran...</span>'; 
+            return; 
+        }
+
+        const kode = inputValue.split(' - ')[0].trim(); 
+        container.innerHTML = '<div class="spinner-border spinner-border-sm text-primary"></div> <span class="small ms-2">Mencari dokumen di brankas...</span>';
+
+        google.script.run
+            .withSuccessHandler(res => {
+                // Tangkap error jika Backend bermasalah
+                if (res.error) {
+                    container.innerHTML = '<span class="text-danger small"><i class="bi bi-exclamation-triangle"></i> Gagal membaca database: ' + res.error + '</span>';
+                    return;
+                }
+                
+                if (!res.dokumen || res.dokumen.length === 0) {
+                    container.innerHTML = '<span class="text-danger small">Tidak ada dokumen tersedia di brankas untuk kru ini.</span>';
+                    return;
+                }
+                let html = '';
+                res.dokumen.forEach(doc => {
+                    html += `
+                    <div class="form-check mb-2 pb-2 border-bottom">
+                      <input class="form-check-input doc-checkbox" type="checkbox" value="${doc.namaDoc}" id="${doc.id}">
+                      <label class="form-check-label small text-dark fw-medium" for="${doc.id}">
+                        ${doc.namaDoc} <br><span class="text-muted small" style="font-size: 0.75rem;">(No: ${doc.nomor})</span>
+                      </label>
+                    </div>`;
+                });
+                container.innerHTML = html;
+                
+                const aksiCurrent = document.getElementById('swal-aksi').value;
+                toggleAutoSelect(aksiCurrent);
+            })
+            .withFailureHandler(err => {
+                container.innerHTML = '<span class="text-danger small">Koneksi terputus: ' + err.message + '</span>';
+            })
+            .getDokumenKruTersedia(kode);
+    }
+
+    // Helper untuk mengubah format tgl Excel (YYYY-MM-DD) agar bisa dibaca input date
+    function formatTgl(str) {
+        if(!str || str === '-') return '';
+        // Jika format sudah YYYY-MM-DD maka langsung return
+        return str; 
+    }
+
+    // ==========================================
+    // MENAMPILKAN DATA KE TABEL RIWAYAT
+    // ==========================================
+    function muatRiwayatDokumen() {
+        const tbody = document.getElementById('table-body-doclog');
+        if(!tbody) return; // Mencegah error jika elemen tabel tidak ditemukan
+
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary me-2"></div> Memuat data riwayat...</td></tr>';
+
+        google.script.run.withSuccessHandler(res => {
+            if (!res || res.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">Belum ada riwayat sirkulasi dokumen.</td></tr>';
+                return;
+            }
+
+            let html = '';
+            res.forEach(row => {
+                // SABUK PENGAMAN: Menggunakan String() agar kebal dari data kosong/null
+                const statusStr = String(row.status || "");
+                const aksiStr = String(row.aksi || "");
+
+                // Warna badge otomatis
+                let badgeStatus = statusStr.includes('Selesai') ? 'bg-success' : 'bg-warning text-dark';
+                let badgeAksi = aksiStr.includes('Pinjam') ? 'bg-info text-dark' : 'bg-danger text-white';
+
+                html += `
+                <tr>
+                    <td class="ps-4">
+                        <span class="fw-bold text-dark d-block">${row.idTrx}</span>
+                        <small class="text-muted" style="font-size: 0.75rem;">${row.waktu}</small>
+                    </td>
+                    <td>
+                        <span class="fw-bold text-primary">${row.nama}</span><br>
+                        <small class="text-muted" style="font-size: 0.75rem;">${row.kode}</small>
+                    </td>
+                    <td><span class="badge ${badgeAksi} px-2 py-1">${aksiStr || "-"}</span></td>
+                    <td>
+                        <span class="d-inline-block text-truncate text-muted small" style="max-width: 200px;" title="${row.dokumen}">${row.dokumen}</span>
+                    </td>
+                    <td><span class="badge ${badgeStatus} px-2 py-1">${statusStr || "-"}</span></td>
+                    <td class="text-end pe-4">
+                        <button class="btn btn-sm btn-outline-secondary shadow-sm" onclick='siapkanCetakSirkulasi(${JSON.stringify(row)})'><i class="bi bi-printer"></i> Cetak</button>
+                    </td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }).withFailureHandler(err => {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle"></i> Gagal memuat tabel: ${err.message}</td></tr>`;
+        }).getRiwayatSirkulasi();
+    }
+
+    // ==========================================
+    // FUNGSI PERSIAPAN CETAK PDF (MEMANGGIL MODAL)
+    // ==========================================
+    window.siapkanCetakSirkulasi = function(rowData) {
+        Swal.fire({title: 'Menyiapkan Format...', text: 'Mengambil nomor antrean surat...', allowOutsideClick: false, didOpen: () => Swal.showLoading()});
+
+        google.script.run
+            .withSuccessHandler(function(res) {
+                Swal.close();
+                
+                // Isi input di dalam modal
+                document.getElementById('cetak_sirkulasi_nomor').value = res.nomorLengkap;
+                document.getElementById('cetak_sirkulasi_urut').value = res.angkaUrut;
+                document.getElementById('cetak_sirkulasi_data').value = JSON.stringify(rowData);
+
+                // Tampilkan Modal
+                const modal = new bootstrap.Modal(document.getElementById('modalCetakSirkulasi'));
+                modal.show();
+            })
+            .withFailureHandler(function(err) {
+                Swal.fire('Error', err.message, 'error');
+            })
+            .getNomorSuratSirkulasi(rowData.aksi);
+    }
+
+    // ==========================================
+    // FUNGSI EKSEKUSI CETAK PDF FINAL
+    // ==========================================
+    window.prosesCetakSirkulasiFinal = function() {
+        const rowDataStr = document.getElementById('cetak_sirkulasi_data').value;
+        if(!rowDataStr) return;
+
+        const rowData = JSON.parse(rowDataStr);
+        const nomorEdit = document.getElementById('cetak_sirkulasi_nomor').value;
+        const angkaUrut = document.getElementById('cetak_sirkulasi_urut').value;
+        const idKop = document.getElementById('cetak_sirkulasi_kop').value;
+
+        // Tutup modal
+        bootstrap.Modal.getInstance(document.getElementById('modalCetakSirkulasi')).hide();
+
+        Swal.fire({
+            title: 'Membangun PDF...',
+            text: 'Merakit dokumen dan menyimpannya ke Google Drive...',
+            allowOutsideClick: false,
+            didOpen: () => { Swal.showLoading(); }
+        });
+
+        google.script.run
+            .withSuccessHandler(function(url) {
+                Swal.close();
+                window.open(url, '_blank'); // Buka PDF
+            })
+            .withFailureHandler(function(err) {
+                Swal.fire('Gagal Mencetak!', err.message, 'error');
+            })
+            .cetakPDFSirkulasiBackend(rowData, nomorEdit, angkaUrut, idKop);
+    }
+
+    // ==========================================
+    // JS CLIENT: TAB MONITOR KEDALUWARSA
+    // ==========================================
+    let globalExpiredDocs = [];
+
+    function loadDataExpiredDocs() {
+        const tbody = document.getElementById('table-body-expired');
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5"><span class="spinner-border spinner-border-sm text-danger"></span> Memindai database dokumen...</td></tr>';
+        
+        // Panggil fungsi backend yang SAMA dengan yang dipakai lonceng Dashboard
+        google.script.run
+            .withSuccessHandler(data => {
+                globalExpiredDocs = data;
+                applyFilterExpiredDocs();
+            })
+            .withFailureHandler(err => {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle"></i> Gagal memuat data: ${err.message}</td></tr>`;
+            })
+            .getNotifikasiExpired();
+    }
+
+    function applyFilterExpiredDocs() {
+        const keyword = document.getElementById('filter-expired-search').value.toLowerCase();
+        
+        let filtered = globalExpiredDocs.filter(row => {
+            let matchSearch = true;
+            if (keyword) {
+                const nama = (row.nama || '').toLowerCase();
+                const tipe = (row.tipe || '').toLowerCase();
+                const kode = (row.kode || '').toLowerCase();
+                matchSearch = nama.includes(keyword) || tipe.includes(keyword) || kode.includes(keyword);
+            }
+            return matchSearch;
+        });
+
+        renderTableExpiredDocs(filtered);
+    }
+
+    function renderTableExpiredDocs(data) {
+        const tbody = document.getElementById('table-body-expired');
+        let html = '';
+
+        if(data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-5"><i class="bi bi-check-circle fs-1 text-success d-block mb-2"></i>Aman! Semua dokumen memenuhi standar SOP.</td></tr>';
+            return;
+        }
+
+        data.forEach(item => {
+            // Logika warna sama seperti dashboard
+            let statusWarna = item.sisaHari < 0 ? 'bg-danger text-white' : (item.sisaBulan <= 3 ? 'bg-warning text-dark' : 'bg-secondary bg-opacity-10 text-dark');
+            let teksSisa = item.sisaHari < 0 ? `EXPIRED (${Math.abs(item.sisaHari)} hari lalu)` : 
+                           (item.sisaBulan <= 0 ? `${item.sisaHari} Hari` : `${item.sisaBulan} Bulan`);
+
+            html += `
+            <tr class="align-middle">
+                <td class="ps-4">
+                    <div class="fw-bold text-dark">${item.nama}</div>
+                    <div class="text-muted" style="font-size: 0.75rem;">${item.kode}</div>
+                </td>
+                <td><span class="fw-bold text-primary">${item.tipe}</span></td>
+                <td class="fw-medium">${item.tanggal}</td>
+                <td><span class="badge ${statusWarna} border shadow-sm px-3 py-2" style="font-size: 0.8rem;"><i class="bi bi-clock-history"></i> Sisa ${teksSisa}</span></td>
+                <td><span class="badge bg-light text-secondary border px-2 py-1">SOP: Min. ${item.batasSOP} Bln</span></td>
+                <td class="text-center pe-4">
+                    <button class="btn btn-sm btn-dark shadow-sm fw-bold px-3" onclick="lihatDetail('${item.kode}')">
+                        <i class="bi bi-person-lines-fill me-1"></i> Buka Profil
+                    </button>
+                </td>
+            </tr>`;
+        });
+
+        tbody.innerHTML = html;
+    }
+</script>

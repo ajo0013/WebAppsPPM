@@ -1,0 +1,921 @@
+<script>
+  let globalCrewData = [];
+  let globalSeaServices = {};
+  let globalDocs = {};
+
+  let currentFilteredData = []; 
+  let currentPage = 1;
+  let rowsPerPage = 10;
+
+  // ==========================================
+  // OPTIMASI: 1 PEMANGGILAN UNTUK SEMUA DATA
+  // ==========================================
+  function loadDataCrew() {
+    const tbody = document.getElementById('table-body-crew');
+    if(!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Memuat data database secara utuh...</td></tr>';
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        if (!res) return;
+
+        // 1. Ekstrak & Format Dokumen
+        globalDocs = {};
+        res.docSummary.forEach(row => {
+          const kode = row[0];
+          const tipeDoc = row[1]; 
+          if (!globalDocs[kode]) globalDocs[kode] = [];
+          globalDocs[kode].push(tipeDoc);
+        });
+
+        // 2. Ekstrak & Format Pengalaman (Sea Services)
+        globalSeaServices = {};
+        res.seaSummary.forEach(row => {
+          const kode = row[0];
+          const kapal = (row[1] || '').toLowerCase();
+          if (!globalSeaServices[kode]) globalSeaServices[kode] = [];
+          globalSeaServices[kode].push(kapal);
+        });
+
+        // 3. Render Dropdown Jabatan
+        const ddJabatan = [document.getElementById('jabatan-dropdown'), document.getElementById('filter-jabatan')];
+        ddJabatan.forEach(dd => {
+          if(dd) {
+            let isFilter = dd.id === 'filter-jabatan';
+            dd.innerHTML = isFilter ? '<option value="">Semua Jabatan</option>' : '<option value="">-- Pilih Jabatan --</option>';
+            res.jabatanList.forEach(jab => {
+              const option = document.createElement('option'); option.value = jab; option.text = jab; dd.appendChild(option);
+            });
+          }
+        });
+
+        // 4. Render Dropdown Status
+        const ddStatus = [document.getElementById('status-dropdown'), document.getElementById('filter-status')];
+        ddStatus.forEach(dd => {
+          if(dd) {
+            let isFilter = dd.id === 'filter-status';
+            dd.innerHTML = isFilter ? '<option value="">Semua Status</option>' : '<option value="">-- Pilih Status --</option>';
+            res.statusList.forEach(stat => {
+              const option = document.createElement('option'); option.value = stat; option.text = stat; dd.appendChild(option);
+            });
+          }
+        });
+
+        // 5. Simpan Data Master Kru & Tampilkan
+        globalCrewData = res.crewData; 
+        applyFilters(); 
+      })
+      .withFailureHandler(function(error) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger py-4">Gagal memuat data: ${error.message}</td></tr>`;
+      })
+      .getCrewListMasterData();
+  }
+
+  // Hapus fungsi loadJabatanDropdown() dan loadStatusDropdown() dari DOMContentLoaded 
+  // karena sudah ditangani otomatis oleh loadDataCrew() di atas.
+  document.addEventListener("DOMContentLoaded", function() {
+    // Cukup panggil 1 fungsi ini saja saat halaman dibuka!
+    // loadDataCrew() dipanggil oleh Sidebar Menu onclick="loadPage('CrewList'); loadDataCrew();"
+  });
+
+  function applyFilters() {
+    const keyword = document.getElementById('filter-search').value.toLowerCase();
+    const jab = document.getElementById('filter-jabatan').value;
+    const stat = document.getElementById('filter-status').value;
+    const tankerFilter = document.getElementById('filter-tanker') ? document.getElementById('filter-tanker').value : "";
+    const sortOrder = document.getElementById('sort-tanggal').value;
+
+    let filtered = globalCrewData.filter((row) => {
+      if (!row[0]) return false; 
+      if (row[12] === 'Blacklisted') return false; 
+
+      const nama = (row[1] || '').toLowerCase();
+      const skill = (row[14] || '').toLowerCase(); 
+      const kode = row[0];
+      const seaExp = globalSeaServices[kode] ? globalSeaServices[kode].join(" ") : ""; 
+
+      let matchSearch = true;
+      if (keyword) {
+        matchSearch = nama.includes(keyword) || skill.includes(keyword) || seaExp.includes(keyword);
+      }
+
+      let matchJab = true; if (jab) matchJab = row[2] === jab;
+      let matchStat = true; if (stat) matchStat = row[12] === stat;
+
+      let matchTanker = true;
+      if (tankerFilter === 'tanker') {
+        let validasi = cekKesiapanKru(row[2], kode);
+        matchTanker = validasi.tanker;
+      }
+
+      return matchSearch && matchJab && matchStat && matchTanker;
+    });
+
+    filtered.sort((a, b) => {
+      let dateA = a[16] ? new Date(a[16]).getTime() : Infinity; 
+      let dateB = b[16] ? new Date(b[16]).getTime() : Infinity;
+      
+      if (sortOrder === 'desc') {
+        if (dateA === Infinity && dateB !== Infinity) return 1;
+        if (dateB === Infinity && dateA !== Infinity) return -1;
+        return dateB - dateA;
+      } else {
+        return dateA - dateB;
+      }
+    });
+    
+    // LOGIKA PAGINASI BARU
+    currentFilteredData = filtered; // Simpan hasil saringan
+    currentPage = 1; // Selalu kembalikan ke halaman 1 setiap kali filter diubah
+    updatePagination();
+  }
+    
+    // ==========================================
+  // MESIN PAGINASI
+  // ==========================================
+  function updatePagination() {
+    const totalRows = currentFilteredData.length;
+    const totalPages = Math.ceil(totalRows / rowsPerPage);
+    
+    if (currentPage < 1) currentPage = 1;
+    if (currentPage > totalPages && totalPages > 0) currentPage = totalPages;
+
+    const startIndex = (currentPage - 1) * rowsPerPage;
+    const endIndex = startIndex + rowsPerPage;
+    const dataToShow = currentFilteredData.slice(startIndex, endIndex); // Potong data sesuai halaman
+
+    renderFilteredTable(dataToShow); // Lempar potongan data ke tabel
+    renderPaginationControls(totalRows, totalPages, startIndex, endIndex);
+  }
+
+  function renderPaginationControls(totalRows, totalPages, startIndex, endIndex) {
+    const container = document.getElementById('pagination-container');
+    const info = document.getElementById('pagination-info');
+    const controls = document.getElementById('pagination-controls');
+
+    if (totalRows === 0) {
+      container.style.setProperty('display', 'none', 'important');
+      return;
+    }
+    
+    container.style.setProperty('display', 'flex', 'important');
+    let actualEnd = endIndex > totalRows ? totalRows : endIndex;
+    info.innerText = `Menampilkan ${startIndex + 1} - ${actualEnd} dari ${totalRows} kru`;
+
+    let html = '';
+    
+    // Tombol Prev
+    let prevDisabled = currentPage === 1 ? 'disabled' : '';
+    html += `<li class="page-item ${prevDisabled}"><a class="page-link" href="#" onclick="changePage(${currentPage - 1}); return false;">&laquo; Prev</a></li>`;
+
+    // Logika Angka Halaman Berderet (Maksimal 5 tombol di tengah)
+    let startPage = Math.max(1, currentPage - 2);
+    let endPage = Math.min(totalPages, currentPage + 2);
+
+    if (startPage > 1) {
+      html += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(1); return false;">1</a></li>`;
+      if (startPage > 2) html += `<li class="page-item disabled"><a class="page-link" href="#"><span aria-hidden="true">...</span></a></li>`;
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      let active = currentPage === i ? 'active' : '';
+      html += `<li class="page-item ${active}"><a class="page-link" href="#" onclick="changePage(${i}); return false;">${i}</a></li>`;
+    }
+
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) html += `<li class="page-item disabled"><a class="page-link" href="#"><span aria-hidden="true">...</span></a></li>`;
+      html += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(${totalPages}); return false;">${totalPages}</a></li>`;
+    }
+
+    // Tombol Next
+    let nextDisabled = currentPage === totalPages ? 'disabled' : '';
+    html += `<li class="page-item ${nextDisabled}"><a class="page-link" href="#" onclick="changePage(${currentPage + 1}); return false;">Next &raquo;</a></li>`;
+
+    controls.innerHTML = html;
+  }
+
+  function changePage(page) {
+    currentPage = page;
+    updatePagination();
+  }
+
+  function ubahRowsPerPage() {
+    let val = document.getElementById('select-rows-per-page').value;
+    rowsPerPage = parseInt(val);
+    currentPage = 1;
+    updatePagination();
+  }
+
+  function resetFilters() {
+    document.getElementById('filter-search').value = "";
+    document.getElementById('filter-jabatan').value = "";
+    document.getElementById('filter-status').value = "";
+    document.getElementById('filter-tanker').value = "";
+    document.getElementById('sort-tanggal').value = "asc";
+    applyFilters();
+  }
+
+  function cekKesiapanKru(jabatan, kodeCrew) {
+    let docs = globalDocs[kodeCrew] || []; 
+    let jabUpper = (jabatan || "").toUpperCase();
+    
+    let syarat = ["PP", "CDC", "YELLOW", "BST", "AFF", "SCRB", "MFA", "SAT", "SDSD"];
+    let missing = [];
+    let isTanker = false;
+    
+    if (jabUpper.includes("ABLE") || jabUpper.includes("RATING")) {
+      if (!docs.includes("ABLE") && !docs.includes("RATING")) { missing.push("ABLE / RATING"); }
+    }
+    if (jabUpper.includes("ANT") || jabUpper.includes("ATT")) { syarat.push("COC", "COE", "SSO", "MCOB"); }
+    if (jabUpper.includes("ATT")) { syarat.push("ERRM"); }
+    if (jabUpper.includes("ANT")) { syarat.push("BRM", "ARPA", "RADAR", "ECDIS", "GMDSS", "GMDSE", "ORU"); }
+    
+    syarat.forEach(req => {
+      if (req === "PP" && (docs.includes("PP") || docs.some(d => d.includes("PASPOR")))) return;
+      if (!docs.includes(req)) missing.push(req);
+    });
+
+    let syaratTankerUmum = ["BOCT", "BLGT"];
+    let punyaTankerUmum = syaratTankerUmum.every(req => docs.includes(req));
+    if (punyaTankerUmum) {
+      if (jabUpper.includes("ANT") || jabUpper.includes("ATT")) {
+        let syaratTankerOfficer = ["AOT", "ACT", "ALGT"];
+        if (syaratTankerOfficer.every(req => docs.includes(req))) isTanker = true;
+      } else {
+        isTanker = true;
+      }
+    }
+    return { ready: missing.length === 0, missing: missing, tanker: isTanker };
+  }
+
+  // OPTIMASI: DOM Rendering menggunakan String Accumulation
+  function renderFilteredTable(data) {
+    const tbody = document.getElementById('table-body-crew');
+    let htmlString = '';
+
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-5"><i class="bi bi-search fs-3 d-block mb-2"></i>Tidak ada kru yang cocok dengan pencarian Anda.</td></tr>';
+      return;
+    }
+
+    for (let i = 0; i < data.length; i++) {
+      let row = data[i];
+      let kodeKru = row[0];
+      let jabatan = row[2];
+      let tglTampil = row[16] ? row[16].toString().substring(0,10) : '-';
+      let validasi = cekKesiapanKru(jabatan, kodeKru);
+      
+      let statusBadge = "";
+      if (validasi.ready) {
+        statusBadge = `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1"><i class="bi bi-check-circle-fill"></i> Valid</span>`;
+        if (validasi.tanker) {
+          statusBadge += `<br><span class="badge bg-dark bg-opacity-10 text-dark border border-dark border-opacity-25 px-2 py-1 mt-1" style="font-size:0.65rem;"><i class="bi bi-droplet-fill text-warning"></i> Tanker Ready</span>`;
+        }
+      } else {
+        let kurangStr = validasi.missing.slice(0, 2).join(", ");
+        let sisaKurang = validasi.missing.length > 2 ? ` +${validasi.missing.length - 2}` : "";
+        statusBadge = `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 px-2 py-1" title="Kurang: ${validasi.missing.join(', ')}"><i class="bi bi-x-circle-fill"></i> Kurang: ${kurangStr}${sisaKurang}</span>`;
+      }
+
+      htmlString += `
+        <tr class="align-middle">
+          <td class="ps-4 text-muted text-nowrap">${kodeKru}</td>
+          <td class="fw-bold text-dark" style="min-width: 160px;">${row[1]}</td>
+          <td class="text-nowrap"><span class="text-primary fw-medium">${jabatan}</span></td>
+          <td class="text-nowrap"><i class="bi bi-calendar-check text-muted me-1"></i> ${tglTampil}</td>
+          <td class="text-nowrap">${statusBadge}</td>
+          <td class="text-nowrap">${row[5] || '-'}</td> 
+          <td class="text-nowrap"><span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-3 py-1">${row[12] || 'Standby'}</span></td>
+          <td class="text-center pe-4">
+            <div class="d-flex justify-content-center gap-2 flex-nowrap">
+              <button class="btn btn-sm btn-light text-primary shadow-sm border-0" onclick="lihatDetail('${kodeKru}')" title="Lihat Profil Kru" style="padding: 4px 10px;">
+                <i class="bi bi-eye-fill fs-6"></i>
+              </button>
+              <button class="btn btn-sm btn-light text-danger shadow-sm border-0" onclick="pemicuBlacklist('${kodeKru}', '${row[1]}')" title="Blacklist Kru" style="padding: 4px 10px;">
+                <i class="bi bi-slash-circle-fill fs-6"></i>
+              </button>
+            </div>
+          </td>
+        </tr>`;
+    }
+    tbody.innerHTML = htmlString;
+  }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    loadDataCrew();
+    loadJabatanDropdown();
+    loadStatusDropdown();
+  });
+ 
+  // LOGIKA TAHAP 2: BULK ONBOARDING
+  let bulkKruList = [];
+  
+  // Fungsi Bantuan Konversi Tanggal (DD/MM/YYYY menjadi YYYY-MM-DD untuk form input)
+  function konversiTanggalUntukInput(tglStr) {
+    if (!tglStr) return "";
+    let p = tglStr.includes('-') ? tglStr.split('-') : tglStr.split('/');
+    
+    // Jika formatnya DD-MM-YYYY (contoh: 22-02-2026)
+    if (p.length === 3) {
+      let tahun = p[2].length === 4 ? p[2] : p[0];
+      let bulan = p[1].padStart(2, '0');
+      let hari = p[2].length === 4 ? p[0].padStart(2, '0') : p[2].padStart(2, '0');
+      
+      // HTML form input butuh format YYYY-MM-DD
+      return `${tahun}-${bulan}-${hari}`; 
+    } 
+    return tglStr;
+  }
+
+  document.addEventListener('change', function(e) {
+    if (e.target && e.target.id === 'input_folder_master') {
+      const files = e.target.files;
+      if (files.length === 0) return;
+
+      let mapKru = {};
+      for (let f of files) {
+        let parts = f.webkitRelativePath.split('/');
+        if (parts.length >= 3) {
+          let namaKru = parts[1]; // Ini nama foldernya
+          if (!mapKru[namaKru]) mapKru[namaKru] = [];
+          mapKru[namaKru].push(f);
+        }
+      }
+
+      let namaKruArray = Object.keys(mapKru).slice(0, 5); 
+      
+      // AUTO-FILL PROFIL: Memecah Nama Folder (Kode_Nama_Jabatan)
+      bulkKruList = namaKruArray.map(namaFolderAsli => {
+        let folderParts = namaFolderAsli.split('_');
+        let kodeKru = folderParts[0] || "";
+        let namaKru = folderParts[1] || namaFolderAsli; // Fallback jika format tidak pakai underscore
+        let jabatanKru = folderParts[2] || "";
+        let tempatlahirKru = folderParts[3] || "";
+        let tanggallahirKru = konversiTanggalUntukInput(folderParts[4]);
+        
+        return { 
+          namaFolder: namaFolderAsli, 
+          kodeOtomatis: kodeKru,
+          namaOtomatis: namaKru,
+          jabatanOtomatis: jabatanKru,
+          tempatlahirOtomatis: tempatlahirKru,
+          tanggallahirOtomatis: tanggallahirKru,
+          files: mapKru[namaFolderAsli] 
+        };
+      });
+      
+      renderBulkUI();
+    }
+  });
+
+  function renderBulkUI() {
+    document.getElementById('card-profil-onboard').style.display = 'block';
+    document.getElementById('btn-proses-semua').disabled = false;
+    document.getElementById('info-jumlah-kru').innerText = bulkKruList.length + " Kru Terdeteksi";
+    
+    let tbodyP = document.getElementById('tbody-profil-onboard');
+    let contD = document.getElementById('container-dokumen-onboard');
+    let htmlProfil = '';
+    let htmlDocContainer = '';
+
+    bulkKruList.forEach((kru, idx) => {
+      // PROFIL: Mengisi value otomatis dari hasil pecahan nama folder
+      htmlProfil += `
+        <tr class="row-profil-bulk">
+          <td><input type="text" class="form-control form-control-sm b-kode border-primary fw-bold" value="${kru.kodeOtomatis}" placeholder="Ketik Kode"></td>
+          <td><input type="text" class="form-control form-control-sm b-nama" value="${kru.namaOtomatis}"></td>
+          <td><input type="text" class="form-control form-control-sm b-jabatan" value="${kru.jabatanOtomatis}"></td>
+          <td><input type="text" class="form-control form-control-sm b-tempat" value="${kru.tempatlahirOtomatis}"></td>
+          <td><input type="date" class="form-control form-control-sm b-tgl" value="${kru.tanggallahirOtomatis}"></td>
+          <td><input type="text" class="form-control form-control-sm b-telp"></td>
+          <td><input type="text" class="form-control form-control-sm b-email"></td>
+          <td><input type="text" class="form-control form-control-sm b-alamat"></td>
+          <td><input type="text" class="form-control form-control-sm b-nik"></td>
+        </tr>`;
+
+      // DOKUMEN: AUTO-FILL memecah Nama File (Tipe_Kode+Nomor_Tempat_Issued_Expired)
+      let docRows = kru.files.map(f => {
+        let fileNameNoExt = f.name.split('.').slice(0, -1).join('.'); 
+        let dParts = fileNameNoExt.split('_');
+        
+        let tipeDoc = dParts[0] ? dParts[0].toUpperCase() : fileNameNoExt.toUpperCase();
+        
+        // Membaca angka random / nomor asli dari nama file
+        let nomorGabungan = dParts[1] || "";
+        let nomorRandom = nomorGabungan.includes('+') ? nomorGabungan.split('+')[1] : nomorGabungan;
+        
+        // --- LOGIKA PENOMORAN DOKUMEN KHUSUS ---
+        // Daftar dokumen yang TIDAK perlu ditambahkan Kode Kru
+        let daftarPengecualian = ["PASPOR", "PP", "BUKPEL", "CDC", "YELLOW", "MCU", "PANAMA", "ORU", "MMR", "VACCINE", "VAKSIN"];
+        
+        // Cek apakah tipeDoc saat ini ada di dalam daftar pengecualian
+        let tanpaKodeKru = daftarPengecualian.some(ex => tipeDoc.includes(ex));
+        
+        let finalNomorDoc = nomorRandom;
+        // Jika BUKAN dokumen pengecualian, DAN kode kru tersedia, gabungkan:
+        if (!tanpaKodeKru && kru.kodeOtomatis) {
+            finalNomorDoc = kru.kodeOtomatis + nomorRandom;
+        }
+        // ---------------------------------------
+
+        let tempatDoc = dParts[2] || "";
+        let issuedDoc = konversiTanggalUntukInput(dParts[3]);
+        let expiryDoc = konversiTanggalUntukInput(dParts[4]);
+
+        return `
+          <tr class="row-doc-bulk-${idx}">
+            <td class="small fw-bold text-secondary ps-3">${f.name}</td>
+            <td><input type="text" class="form-control form-control-sm d-tipe" value="${tipeDoc}"></td>
+            <td><input type="text" class="form-control form-control-sm d-nomor" value="${finalNomorDoc}"></td>
+            <td><input type="text" class="form-control form-control-sm d-tempat" value="${tempatDoc}"></td>
+            <td><input type="date" class="form-control form-control-sm d-issued" value="${issuedDoc}"></td>
+            <td><input type="date" class="form-control form-control-sm d-expiry" value="${expiryDoc}"></td>
+          </tr>`;
+      }).join('');
+
+      htmlDocContainer += `
+        <div class="card shadow-sm border-0 mb-4 bg-white">
+          <div class="card-header bg-transparent border-bottom py-3 text-primary fw-bold">
+            <i class="bi bi-files me-2"></i> File Dokumen: ${kru.namaFolder}
+          </div>
+          <div class="card-body p-0">
+            <table class="table table-sm table-borderless mb-0">
+              <tbody id="tbody-doc-${idx}">${docRows}</tbody>
+            </table>
+          </div>
+        </div>`;
+    });
+    
+    tbodyP.innerHTML = htmlProfil;
+    contD.innerHTML = htmlDocContainer;
+    pasangSmartPaste();
+  }
+
+  function pasangSmartPaste() {
+    const handlePaste = (e) => {
+      const pastedText = (e.clipboardData || window.clipboardData).getData('Text');
+      if (!pastedText.includes('\t') && !pastedText.includes('\n')) return;
+
+      e.preventDefault();
+      const rows = pastedText.split(/\r?\n/).filter(r => r.trim() !== "");
+      let currentTr = e.target.closest('tr');
+      const inputsInRow = Array.from(currentTr.querySelectorAll('input'));
+      const startIndex = inputsInRow.indexOf(e.target);
+
+      rows.forEach(row => {
+        if (!currentTr) return;
+        const cells = row.split('\t');
+        const targetInputs = currentTr.querySelectorAll('input');
+        cells.forEach((text, i) => {
+          let idx = startIndex + i;
+          if (idx < targetInputs.length) {
+            let inp = targetInputs[idx];
+            if (inp.type === 'date') {
+              let p = text.split('/');
+              if (p.length === 3) inp.value = `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+            } else { inp.value = text.trim(); }
+          }
+        });
+        currentTr = currentTr.nextElementSibling;
+      });
+    };
+    document.querySelectorAll('#view-BulkOnboard input').forEach(el => { el.addEventListener('paste', handlePaste); });
+  }
+
+  // OPTIMASI: HTML5 Canvas Image Compression di Frontend
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      if (!file.type.match(/image.*/)) {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+        reader.readAsDataURL(file);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1200; const MAX_HEIGHT = 1200;
+          let width = img.width; let height = img.height;
+          if (width > height) {
+            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+          } else {
+            if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+          }
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.6)); // Compress JPEG 60% quality
+        };
+        img.src = e.target.result;
+      };
+      reader.onerror = error => reject(error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function prosesSemuaKruOnboard() {
+    const btn = document.getElementById('btn-proses-semua');
+    const barProgress = document.getElementById('bar-progress-onboard');
+    const textStatus = document.getElementById('teks-status-onboard');
+    const cardProgress = document.getElementById('card-progress-onboard');
+
+    const rowsProfil = document.querySelectorAll('.row-profil-bulk');
+    if (rowsProfil.length === 0) return alert("Data kosong!");
+    btn.disabled = true; cardProgress.style.display = 'block';
+
+    let totalKru = bulkKruList.length; 
+    
+    // --- TAMBAHAN: Penampung Laporan ---
+    let listBerhasil = [];
+    let listGagal = [];
+
+    for (let i = 0; i < totalKru; i++) {
+      let trP = rowsProfil[i]; let dataKru = bulkKruList[i];
+      let payload = {
+        kode_crew: trP.querySelector('.b-kode').value, nama_lengkap: trP.querySelector('.b-nama').value,
+        jabatan: trP.querySelector('.b-jabatan').value, tempat_lahir: trP.querySelector('.b-tempat').value,
+        tanggal_lahir: trP.querySelector('.b-tgl').value, telepon: trP.querySelector('.b-telp').value,
+        email: trP.querySelector('.b-email').value, asal_daerah: trP.querySelector('.b-alamat').value,
+        nik: trP.querySelector('.b-nik').value, status: "Standby", dokumen: []
+      };
+      
+      if (!payload.kode_crew || !payload.nama_lengkap) {
+        listGagal.push(`Baris ${i+1}: Kode & Nama wajib diisi`); 
+        continue;
+      }
+
+      textStatus.innerText = `[${i+1}/${totalKru}] Memproses: ${payload.nama_lengkap}...`;
+      let rowsDoc = document.querySelectorAll(`.row-doc-bulk-${i}`);
+      for (let j = 0; j < rowsDoc.length; j++) {
+        let trD = rowsDoc[j]; let fileObj = dataKru.files[j];
+        textStatus.innerText = `[${i+1}/${totalKru}] Mengompres File: ${fileObj.name}...`;
+        let base64 = await fileToBase64(fileObj);
+        payload.dokumen.push({
+          tipe: trD.querySelector('.d-tipe').value, nomor: trD.querySelector('.d-nomor').value,
+          tempat: trD.querySelector('.d-tempat').value, issued: trD.querySelector('.d-issued').value,
+          expiry: trD.querySelector('.d-expiry').value, fileName: fileObj.name, fileData: base64
+        });
+      }
+
+      textStatus.innerText = `[${i+1}/${totalKru}] Mengunggah ke Drive...`;
+      await new Promise((resolve) => {
+        google.script.run
+          .withSuccessHandler(() => { 
+            listBerhasil.push(payload.nama_lengkap); 
+            resolve(); 
+          })
+          .withFailureHandler((err) => { 
+            // Ambil pesan error dari backend (contoh: "Kode Crew sudah terdaftar")
+            let pesanError = err.message.replace("Gagal! ", ""); 
+            listGagal.push(`${payload.nama_lengkap} (${pesanError})`); 
+            resolve(); 
+          })
+          .simpanBulkOnboardSatuKru(payload);
+      });
+      
+      let percent = Math.round(((i + 1) / totalKru) * 100);
+      barProgress.style.width = percent + "%"; barProgress.innerText = percent + "%";
+    }
+
+    // --- RESET UI PROGRESS BAR ---
+    cardProgress.style.display = 'none'; 
+    barProgress.style.width = "0%";      
+    barProgress.innerText = "0%";
+    
+    document.getElementById('input_folder_master').value = "";
+    document.getElementById('card-profil-onboard').style.display = 'none';
+    document.getElementById('container-dokumen-onboard').innerHTML = '';
+    btn.disabled = false;
+
+    // --- RANGKUMAN NOTIFIKASI CERDAS MENGGUNAKAN SWEETALERT ---
+    let htmlPesan = `<div class="mb-3 text-dark">Total diproses: <b>${totalKru} Kru</b><br>Berhasil: <b class="text-success">${listBerhasil.length}</b> | Gagal: <b class="text-danger">${listGagal.length}</b></div>`;
+    
+    if(listGagal.length > 0) {
+        htmlPesan += `<div class="text-start bg-danger bg-opacity-10 p-3 rounded border border-danger border-opacity-25" style="max-height: 200px; overflow-y: auto; font-size: 0.85rem;">
+            <p class="fw-bold text-danger mb-1">Rincian Data Gagal:</p>
+            <ul class="mb-0 text-dark">`;
+        listGagal.forEach(gagal => { htmlPesan += `<li>${gagal}</li>`; });
+        htmlPesan += `</ul></div>`;
+    }
+
+    let tipeIkon = listGagal.length === 0 ? 'success' : (listBerhasil.length === 0 ? 'error' : 'warning');
+    let judulNotif = listGagal.length === 0 ? 'Upload Selesai!' : 'Selesai dengan Catatan';
+
+    Swal.fire({
+        title: judulNotif,
+        html: htmlPesan,
+        icon: tipeIkon,
+        confirmButtonColor: '#4361ee',
+        confirmButtonText: 'Tutup & Muat Ulang'
+    }).then(() => {
+        // Refresh Data Tabel
+        loadPage('CrewList');
+        loadDataCrew();
+    });
+  }
+
+  const formTambahManual = document.getElementById('form-tambah-crew');
+  if (formTambahManual) {
+    formTambahManual.addEventListener('submit', async function(e) {
+      e.preventDefault(); 
+      const btn = document.getElementById('btn-simpan-crew');
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Menyimpan...';
+      btn.disabled = true;
+
+      const form = this;
+      const emailVal = form.email.value.trim().toLowerCase();
+      const nikVal = form.nik.value.trim();
+      if (emailVal && !emailVal.includes('@gmail')) {
+        alert("Email harus menggunakan @gmail.com!");
+        btn.innerHTML = 'Simpan Data'; btn.disabled = false; return;
+      }
+      if (nikVal && nikVal.length !== 16) {
+        alert("NIK harus persis 16 digit!");
+        btn.innerHTML = 'Simpan Data'; btn.disabled = false; return;
+      }
+
+      const payload = {
+        kode_crew: form.kode_crew.value, nama_lengkap: form.nama_lengkap.value, jabatan: form.jabatan.value,
+        telepon: form.telepon.value, tempat_lahir: form.tempat_lahir.value, tanggal_lahir: form.tanggal_lahir.value,
+        asal_daerah: form.asal_daerah.value, email: form.email.value, status: form.status.value, nik: form.nik.value, skill: form.skill.value,
+        fileFotoName: "", fileFotoData: "", fileKtpName: "", fileKtpData: "", fileTtdName: "", fileTtdData: ""
+      };
+
+      const fFoto = document.getElementById('manual_foto').files[0];
+      const fKtp = document.getElementById('manual_ktp').files[0];
+      const fTtd = document.getElementById('manual_ttd').files[0];
+
+      if (fFoto) { payload.fileFotoName = fFoto.name; payload.fileFotoData = await fileToBase64(fFoto); }
+      if (fKtp) { payload.fileKtpName = fKtp.name; payload.fileKtpData = await fileToBase64(fKtp); }
+      if (fTtd) { payload.fileTtdName = fTtd.name; payload.fileTtdData = await fileToBase64(fTtd); }
+
+      google.script.run
+        .withSuccessHandler(function(pesan) {
+          alert(pesan); form.reset();
+          bootstrap.Modal.getInstance(document.getElementById('modalTambahCrew')).hide();
+          loadDataCrew(); btn.innerHTML = 'Simpan Data'; btn.disabled = false;
+        })
+        .withFailureHandler(function(err) {
+          alert("Gagal menyimpan: " + err.message); btn.innerHTML = 'Simpan Data'; btn.disabled = false;
+        })
+        .simpanKruManual(payload);
+    });
+  }
+
+  function pemicuBlacklist(kode, nama) {
+    document.getElementById('blacklist-kode-crew').value = kode;
+    document.getElementById('blacklist-alasan').value = "";
+    new bootstrap.Modal(document.getElementById('modalBlacklist')).show();
+  }
+
+  function eksekusiBlacklist() {
+    const kode = document.getElementById('blacklist-kode-crew').value;
+    const alasan = document.getElementById('blacklist-alasan').value;
+    if(!alasan) return alert("Alasan wajib diisi!");
+
+    google.script.run
+      .withSuccessHandler(function(res) {
+        alert(res); bootstrap.Modal.getInstance(document.getElementById('modalBlacklist')).hide(); loadDataCrew(); 
+      })
+      .prosesBlacklistBackend(kode, alasan);
+  }
+
+  function loadBlacklistData() {
+    const tbody = document.getElementById('table-body-blacklist');
+    if(!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-5"><div class="spinner-border spinner-border-sm text-danger me-2"></div>Memuat Daftar Blacklist...</td></tr>';
+    google.script.run
+      .withSuccessHandler((data) => {
+        let htmlString = '';
+        let adaData = false;
+        for (let i = 0; i < data.length; i++) {
+          let row = data[i]; if (!row[0]) continue;
+          let statusKru = (row[12] || '').toString().trim().toLowerCase();
+          if (statusKru === 'blacklisted') {
+            adaData = true;
+            htmlString += `<tr>
+              <td class="ps-4 text-muted">${row[0]}</td>
+              <td class="fw-bold text-danger">${row[1]}</td>
+              <td class="text-muted fst-italic">${row[15] || 'Tanpa Alasan'}</td>
+              <td class="text-center pe-4">
+                <button class="btn btn-sm btn-light text-success shadow-sm border-0 fw-bold" onclick="pulihkanKru('${row[0]}')">
+                  <i class="bi bi-arrow-counterclockwise"></i> Pulihkan
+                </button>
+              </td>
+            </tr>`;
+          }
+        }
+        tbody.innerHTML = adaData ? htmlString : '<tr><td colspan="4" class="text-center text-muted py-5">Aman! Belum ada kru yang diblacklist.</td></tr>';
+      })
+      .getCrewData();
+  }
+
+  function pulihkanKru(kode) {
+    Swal.fire({
+        title: 'Konfirmasi Pemulihan',
+        text: "Yakin ingin memulihkan kru ini kembali ke daftar aktif?",
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981', // Warna hijau success
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="bi bi-arrow-counterclockwise"></i> Ya, Pulihkan',
+        cancelButtonText: 'Batal'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            google.script.run.withSuccessHandler((res) => {
+                alert(res); loadBlacklistData();
+            }).pulihkanKruBackend(kode);
+        }
+    });
+  }
+
+  // FITUR CETAK CV MASSAL
+  let listKruUntukCV = [];
+  function bukaModalBulkCV() {
+    const tbody = document.getElementById('table-body-crew');
+    const baris = tbody.querySelectorAll('tr');
+    listKruUntukCV = [];
+    if (baris.length === 0 || baris[0].innerText.includes('Tidak ada kru')) {
+      alert("Tabel kosong! Silakan sesuaikan filter terlebih dahulu."); return;
+    }
+
+    baris.forEach(tr => {
+      const kolom = tr.querySelectorAll('td');
+      if (kolom.length > 1) {
+        const kode = kolom[0].innerText.trim(); const nama = kolom[1].innerText.trim();
+        if (kode) listKruUntukCV.push({ kode: kode, nama: nama });
+      }
+    });
+    document.getElementById('bulk-cv-count').innerText = listKruUntukCV.length + " Kru Siap Cetak";
+    document.getElementById('bulk-cv-status').innerText = "Siap memproses data...";
+    document.getElementById('bulk-cv-progress').style.width = "0%"; document.getElementById('bulk-cv-progress').innerText = "0%";
+    document.getElementById('bulk-cv-result-list').innerHTML = '<li class="list-group-item text-muted text-center py-4">Belum ada dokumen yang dicetak.</li>';
+    document.getElementById('btn-mulai-bulk-cv').disabled = false;
+    new bootstrap.Modal(document.getElementById('modalBulkCV')).show();
+  }
+
+  function generateSatuCVPDF(kodeCrew, idKop) {
+    return new Promise((resolve, reject) => {
+      google.script.run.withSuccessHandler(url => resolve(url)).withFailureHandler(err => reject(err)).generateCVPDF(kodeCrew, idKop);
+    });
+  }
+
+  async function prosesBulkCV() {
+    const btnMulai = document.getElementById('btn-mulai-bulk-cv'); const btnTutup = document.getElementById('btn-tutup-bulk-cv');
+    const statusTeks = document.getElementById('bulk-cv-status'); const progressBar = document.getElementById('bulk-cv-progress');
+    const listHasil = document.getElementById('bulk-cv-result-list');
+
+    btnMulai.disabled = true; btnTutup.disabled = true; listHasil.innerHTML = "";
+    const idKop = "1xAPtnbZBBtFIrN4VEqnwvRk0OfAfQnjN"; 
+    let total = listKruUntukCV.length; let berhasil = 0;
+    
+    for (let i = 0; i < total; i++) {
+      let kru = listKruUntukCV[i];
+      statusTeks.innerHTML = `<span class="text-primary">Memproses (${i+1}/${total}):</span> ${kru.nama}...`;
+      try {
+        let pdfUrl = await generateSatuCVPDF(kru.kode, idKop);
+        listHasil.innerHTML += `<li class="list-group-item d-flex justify-content-between align-items-center"><span class="fw-medium text-dark"><i class="bi bi-check-circle-fill text-success me-2"></i>${kru.nama}</span><a href="${pdfUrl}" target="_blank" class="btn btn-sm btn-outline-success fw-bold px-3">Buka PDF</a></li>`;
+        berhasil++;
+      } catch (error) {
+        listHasil.innerHTML += `<li class="list-group-item d-flex justify-content-between align-items-center bg-danger bg-opacity-10"><span class="fw-medium text-danger"><i class="bi bi-x-circle-fill me-2"></i>${kru.nama}</span><span class="badge bg-danger">Gagal: ${error.message}</span></li>`;
+      }
+      let persentase = Math.round(((i + 1) / total) * 100);
+      progressBar.style.width = persentase + "%"; progressBar.innerText = persentase + "%";
+    }
+
+    statusTeks.innerHTML = `<span class="text-success fw-bold"><i class="bi bi-stars"></i> Selesai! ${berhasil} CV berhasil dibuat.</span>`;
+    btnTutup.disabled = false; btnMulai.innerHTML = '<i class="bi bi-check2-all"></i> Selesai';
+  }
+
+  document.getElementById('modalTambahCrew').addEventListener('show.bs.modal', function () { document.getElementById('tgl_input_manual').value = new Date().toISOString().split('T')[0]; });
+
+
+  function cetakDatabaseCrewPDF() {
+    if (typeof currentFilteredData === 'undefined' || currentFilteredData.length === 0) {
+      alert("Tidak ada data yang bisa dicetak."); return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('l', 'mm', 'a4'); // Landscape agar lebih luas
+
+    let yPos = 0;
+    try { yPos = cetakKopSuratGlobal(doc, 'landscape'); } catch (e) { yPos = 20; }
+
+    doc.setFontSize(14); doc.setFont("helvetica", "bold");
+    doc.text("LAPORAN DATABASE KANDIDAT KRU", 148.5, yPos + 10, { align: "center" });
+
+    const filterJabatan = document.getElementById('filter-jabatan').value || "Semua Jabatan";
+    const filterStatus = document.getElementById('filter-status').value || "Semua Status";
+    
+    doc.setFontSize(9); doc.setFont("helvetica", "normal");
+    doc.text(`Filter Pencarian : ${filterJabatan} | Status: ${filterStatus}`, 14, yPos + 20);
+
+    const today = new Date();
+    const tglCetak = today.getDate() + "/" + (today.getMonth() + 1) + "/" + today.getFullYear();
+    doc.text("Tanggal Cetak: " + tglCetak, 283, yPos + 20, { align: "right" });
+
+    const tableHeaders = [["NO", "KODE", "NAMA LENGKAP", "JABATAN", "TGL STANDBY", "KESIAPAN DOKUMEN", "NO TELEPON"]];
+    const tableData = currentFilteredData.map((row, index) => {
+      const validasi = cekKesiapanKru(row[2], row[0]);
+      let statusDokumen = validasi.ready ? "VALID" + (validasi.tanker ? " (TANKER)" : "") : "KURANG: " + validasi.missing.join(", ");
+      const tglStandby = row[16] ? row[16].toString().substring(0, 10) : "-";
+
+      return [ index + 1, row[0], row[1], row[2], tglStandby, statusDokumen, row[5] || "-" ];
+    });
+
+    doc.autoTable({
+      head: tableHeaders,
+      body: tableData,
+      startY: yPos + 25,
+      margin: { top: 15, right: 14, bottom: 15, left: 14 },
+      theme: 'grid',
+      styles: { 
+        font: 'helvetica', fontSize: 8, cellPadding: 4, valign: 'middle',
+        lineColor: [226, 232, 240], lineWidth: 0.1, overflow: 'linebreak'
+      },
+      headStyles: { 
+        fillColor: [67, 97, 238], textColor: 255, fontStyle: 'bold', halign: 'center', valign: 'middle'
+      },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      // HILANGKAN CELLWIDTH STATIS! Biarkan JS yang mengukur teks terpanjang (Auto-Fit)
+      columnStyles: {
+        0: { halign: 'center' }, // No
+        1: { halign: 'center' }, // Kode
+        2: { fontStyle: 'bold' }, // Nama
+        3: { halign: 'center' }, // Jabatan
+        4: { halign: 'center' }, // Tanggal
+        6: { halign: 'center' }  // Telp
+      }
+    });
+
+    doc.save(`Database_Crew_${filterJabatan.replace(/\s/g, "_")}_${tglCetak.replace(/\//g, "-")}.pdf`);
+  }
+
+
+  function modalManualMCU() {
+    const bulanRomawi = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
+    const blnSekarang = bulanRomawi[new Date().getMonth()];
+    const thnSekarang = new Date().getFullYear();
+
+    Swal.fire({
+        title: 'Buat Surat Pengantar MCU',
+        html: `
+            <div class="text-start">
+                <label class="fw-bold small mb-1">Nomor Surat</label>
+                <div class="input-group mb-3">
+                    <input id="mcu-no" class="form-control" value="003" style="max-width: 80px;">
+                    <span class="input-group-text">/MCU/ADM/PPM/${blnSekarang}/${thnSekarang}</span>
+                </div>
+
+                <label class="fw-bold small mb-1">Nama Lengkap Kru</label>
+                <input id="mcu-nama" class="form-control mb-3">
+
+                <label class="fw-bold small mb-1">Tempat, Tanggal Lahir</label>
+                <input id="mcu-ttl" class="form-control mb-3">
+
+                <label class="fw-bold small mb-1">Nomor Passport</label>
+                <input id="mcu-paspor" class="form-control mb-3">
+
+                <label class="fw-bold small mb-1">NIK (KTP)</label>
+                <input id="mcu-nik" class="form-control mb-3">
+
+                <label class="fw-bold small mb-1">Rank</label>
+                <input id="mcu-rank" class="form-control mb-3">
+
+                <label class="fw-bold small mb-1 text-danger">Jenis Medical (Contoh: Panama, Ratu, dll)</label>
+                <input id="mcu-tipe" class="form-control" value="Panama">
+            </div>
+        `,
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-file-pdf"></i> Generate PDF',
+        preConfirm: () => {
+            const val = id => document.getElementById(id).value;
+            if(!val('mcu-nama')) { Swal.showValidationMessage('Nama Wajib!'); return false; }
+            return {
+                noSurat: val('mcu-no') + `/MCU/ADM/PPM/${blnSekarang}/${thnSekarang}`,
+                nama: val('mcu-nama'),
+                ttl: val('mcu-ttl'),
+                paspor: val('mcu-paspor'),
+                nik: val('mcu-nik'),
+                rank: val('mcu-rank'),
+                tipeMedical: val('mcu-tipe')
+            }
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            Swal.fire({ title: 'Menyusun Surat...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+            google.script.run
+                .withSuccessHandler(url => {
+                    Swal.fire('Berhasil!', 'Surat PDF telah siap.', 'success');
+                    window.open(url, '_blank');
+                })
+                .withFailureHandler(err => Swal.fire('Gagal', err.message, 'error'))
+                .buatPDFMCUManual(result.value);
+        }
+    });
+}
+</script>

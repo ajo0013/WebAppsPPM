@@ -1,0 +1,299 @@
+<script>
+    // 1. Skrip Jam Real-time
+    function jalankanJam() {
+        const jamEl = document.getElementById('realtime-clock');
+        if(!jamEl) return;
+        const sekarang = new Date();
+        const opsi = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+        jamEl.innerText = sekarang.toLocaleDateString('id-ID', opsi);
+    }
+    setInterval(jalankanJam, 1000);
+    jalankanJam();
+
+    // 2. Navigasi Cepat ke Tambah Kru
+    function bukaKeTambahKru() {
+        loadPage('CrewList');
+        setTimeout(() => {
+            const modalEl = document.getElementById('modalTambahCrew');
+            if(modalEl) new bootstrap.Modal(modalEl).show();
+        }, 500);
+    }
+
+    // ==========================================
+    // 3. MESIN PENARIK DATA SUPER CEPAT (BATCHING)
+    // ==========================================
+    function refreshDashboardKeren() {
+        // Tampilkan animasi loading di semua kartu
+        ['dash-total', 'dash-onboard', 'dash-standby', 'dash-plotting'].forEach(id => {
+            document.getElementById(id).innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        });
+        document.getElementById('dash-count-kapal').innerHTML = '<span class="spinner-border spinner-border-sm text-info"></span>';
+        document.getElementById('dash-count-principal').innerHTML = '<span class="spinner-border spinner-border-sm text-warning"></span>';
+
+        // HANYA 1 PANGGILAN SERVER UNTUK SEMUA DATA
+        google.script.run
+            .withSuccessHandler(function(res) {
+                if (!res) return;
+
+                // A. Render Statistik Kru
+                let d = res.summaryKru;
+                document.getElementById('dash-total').innerText = d.tTotal;
+                document.getElementById('dash-onboard').innerText = d.tOnboard;
+                document.getElementById('dash-standby').innerText = d.tStandby;
+                document.getElementById('dash-plotting').innerText = d.tPlotting;
+
+                let pOnboard = d.tTotal > 0 ? Math.round((d.tOnboard / d.tTotal) * 100) : 0;
+                let pStandby = d.tTotal > 0 ? Math.round((d.tStandby / d.tTotal) * 100) : 0;
+                let pPlotting = d.tTotal > 0 ? Math.round((d.tPlotting / d.tTotal) * 100) : 0;
+
+                document.getElementById('bar-onboard').style.width = pOnboard + '%';
+                document.getElementById('bar-txt-onboard').innerText = pOnboard + '%';
+                document.getElementById('bar-standby').style.width = pStandby + '%';
+                document.getElementById('bar-txt-standby').innerText = pStandby + '%';
+                document.getElementById('bar-plotting').style.width = pPlotting + '%';
+                document.getElementById('bar-txt-plotting').innerText = pPlotting + '%';
+
+                // B. Render Kapal & Principal
+                document.getElementById('dash-count-kapal').innerText = res.statsKapal.totalKapal || 0;
+                document.getElementById('dash-count-principal').innerText = res.statsKapal.totalPrincipal || 0;
+
+                // C. Tembakkan data ke fungsi masing-masing agar langsung di-render tanpa loading server lagi
+                renderNotifikasiDokumen(res.notifExpired);
+                renderNotifikasiKontrak(res.notifKontrak);
+                renderNotifikasiPinjaman(res.notifPinjaman);
+                renderLogPerubahan(res.logData);
+            })
+            .withFailureHandler(function(err){
+                console.error("Dashboard Master Fetch Error: ", err);
+            })
+            .getDashboardMasterData();
+    }
+
+    // 4. Trigger Otomatis
+    window.addEventListener('load', refreshDashboardKeren);
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        const sidebarLinks = document.querySelectorAll('.list-group-item');
+        sidebarLinks.forEach(link => {
+            if (link.getAttribute('onclick') && link.getAttribute('onclick').includes("loadPage('Dashboard')")) {
+                link.addEventListener('click', refreshDashboardKeren);
+            }
+        });
+    });
+
+    // ==========================================
+    // FUNGSI KOMPATIBILITAS (Aman jika dipanggil manual)
+    // ==========================================
+
+    function cekNotifikasiDokumen() { google.script.run.withSuccessHandler(renderNotifikasiDokumen).getNotifikasiExpired(); }
+    function cekNotifikasiKontrak() { google.script.run.withSuccessHandler(renderNotifikasiKontrak).getNotifikasiKontrak(); }
+    function loadLogData() { 
+        document.getElementById('table-body-log').innerHTML = '<tr><td colspan="5" class="text-center py-5"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Memuat riwayat...</td></tr>';
+        google.script.run.withSuccessHandler(renderLogPerubahan).getLogPerubahanData(); 
+    }
+    function muatNotifPinjaman() { google.script.run.withSuccessHandler(renderNotifikasiPinjaman).getNotifikasiPinjaman(); }
+    function loadStatsKapalDashboard() { google.script.run.withSuccessHandler(stats => {
+        document.getElementById('dash-count-kapal').innerText = stats.totalKapal;
+        document.getElementById('dash-count-principal').innerText = stats.totalPrincipal;
+    }).getVesselStatsDashboard(); }
+
+
+    // ==========================================
+    // MESIN RENDER UI (Dipecah agar lebih rapi)
+    // ==========================================
+
+    // FUNGSI RENDER NOTIFIKASI DOKUMEN (Dengan Limit Tampilan)
+    function renderNotifikasiDokumen(data) {
+        const badge = document.getElementById('badge-notif');
+        const listBody = document.getElementById('list-notif-body');
+        
+        if(!data || data.length === 0) {
+            badge.style.display = 'none';
+            listBody.innerHTML = `<div class="text-center py-5 text-muted"><i class="bi bi-check-circle-fill fs-1 text-success mb-3 d-block"></i><h6 class="fw-bold text-dark">Semua Dokumen Aman!</h6><small>Sesuai SOP (PP > 18 Bln, Lainnya > 12 Bln).</small></div>`;
+            return;
+        }
+        
+        badge.innerText = data.length > 99 ? '99+' : data.length;
+        badge.style.display = 'block';
+        
+        let htmlList = '';
+        const batasTampil = 10; // <--- HANYA TAMPILKAN 10 PALING MENDESAK
+        const dataYangDitampilkan = data.slice(0, batasTampil); // Potong array
+
+        dataYangDitampilkan.forEach(item => {
+            let statusWarna = item.sisaHari < 0 ? 'text-danger fw-bold' : (item.sisaBulan <= 3 ? 'text-warning fw-bold' : 'text-dark');
+            let teksSisa = item.sisaHari < 0 ? `EXPIRED (${Math.abs(item.sisaHari)} hari lalu)` : 
+                           (item.sisaBulan <= 0 ? `Sisa ${item.sisaHari} Hari` : `Sisa ${item.sisaBulan} Bulan`);
+            let teksSop = `(SOP: ${item.batasSOP} Bln)`;
+
+            htmlList += `
+            <div class="list-group-item list-group-item-action p-3 border-bottom shadow-sm mb-1 rounded">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <h6 class="mb-0 fw-bold text-primary"><i class="bi bi-file-earmark-text"></i> ${item.tipe}</h6>
+                    <span class="badge bg-light text-dark border"><i class="bi bi-calendar-x"></i> ${item.tanggal}</span>
+                </div>
+                <p class="mb-1 text-dark fw-bold" style="font-size: 0.9rem;">
+                    <i class="bi bi-person-circle text-muted"></i> ${item.nama} <span class="text-muted fw-normal">(${item.kode})</span>
+                </p>
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                    <span class="small ${statusWarna} bg-white px-2 py-1 rounded border" title="Batas Aman SOP: ${item.batasSOP} Bulan">
+                        <i class="bi bi-exclamation-circle-fill"></i> ${teksSisa} <small class="text-muted fw-normal">${teksSop}</small>
+                    </span>
+                    <button class="btn btn-sm btn-dark rounded-pill px-3 shadow-sm" onclick="bukaProfilDariNotif('${item.kode}')">
+                        Cek Profil <i class="bi bi-arrow-right"></i>
+                    </button>
+                </div>
+            </div>`;
+        });
+
+        // JIKA NOTIFIKASI LEBIH DARI 10, TAMBAHKAN TEKS INFO DI BAWAHNYA
+        if(data.length > batasTampil) {
+            htmlList += `
+            <div class="list-group-item text-center p-3 bg-light border-0">
+                <span class="text-muted fw-bold" style="font-size: 0.85rem;">
+                    ... dan ${data.length - batasTampil} peringatan dokumen lainnya.
+                </span>
+            </div>`;
+        }
+
+        listBody.innerHTML = htmlList;
+    }
+
+    function renderNotifikasiKontrak(data) {
+        const badgeKontrak = document.getElementById('badge-notif-kontrak');
+        const listKontrak = document.getElementById('list-notif-kontrak');
+        if(!data || data.length === 0) {
+            badgeKontrak.style.display = 'none';
+            listKontrak.innerHTML = `<div class="text-center py-5 text-muted"><i class="bi bi-shield-check fs-1 text-success mb-3 d-block"></i><h6 class="fw-bold text-dark">Kontrak Kru Aman!</h6><small>Belum ada kru yang masa layarnya mendekati 10 bulan.</small></div>`;
+            return;
+        }
+        badgeKontrak.innerText = data.length > 99 ? '99+' : data.length;
+        badgeKontrak.style.display = 'block';
+        let htmlList = '';
+        const batasTampil = 10;
+        data.slice(0, batasTampil).forEach(item => {
+            let isOverdue = item.durasiBulan >= 12;
+            let warnaDurasi = isOverdue ? 'bg-danger text-white' : 'bg-warning text-dark';
+            let peringatanTeks = isOverdue ? 'MELEBIHI MAKSIMAL (12 Bln)' : 'Persiapan Kepulangan';
+            htmlList += `
+            <div class="list-group-item list-group-item-action p-3 border-bottom shadow-sm mb-1 rounded ${isOverdue ? 'bg-danger bg-opacity-10' : ''}">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-person-badge text-primary"></i> ${item.nama}</h6>
+                    <span class="badge ${warnaDurasi} border shadow-sm"><i class="bi bi-clock-history"></i> ${item.durasiBulan} Bln ${item.durasiHari} Hari</span>
+                </div>
+                <p class="mb-2 text-muted fw-bold" style="font-size: 0.85rem;"><i class="bi bi-ship text-secondary"></i> ${item.kapal} <br><span class="fw-normal"><i class="bi bi-calendar-event"></i> Sign On: ${item.signOn}</span></p>
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                    <span class="small fw-bold ${isOverdue ? 'text-danger' : 'text-warning'}"><i class="bi bi-exclamation-triangle-fill"></i> ${peringatanTeks}</span>
+                    <button class="btn btn-sm btn-dark rounded-pill px-3 shadow-sm" onclick="bukaProfilDariNotifKontrak('${item.kode}')">Kontak Kru <i class="bi bi-telephone-outbound"></i></button>
+                </div>
+            </div>`;
+        });
+        if(data.length > batasTampil) {
+            htmlList += `<div class="list-group-item text-center p-3 bg-light border-0"><span class="text-muted fw-bold" style="font-size: 0.85rem;">... dan ${data.length - batasTampil} peringatan lainnya.</span></div>`;
+        }
+        listKontrak.innerHTML = htmlList;
+    }
+
+    function renderNotifikasiPinjaman(data) {
+        const badge = document.getElementById('badge-notif-pinjaman');
+        const listContainer = document.getElementById('list-notif-pinjaman');
+        if(!badge || !listContainer) return;
+        if (data && data.length > 0) {
+            badge.innerText = data.length;
+            badge.style.display = 'block';
+            let html = '';
+            data.forEach(item => {
+                html += `
+                <div class="list-group-item list-group-item-action p-3 border-bottom">
+                    <div class="d-flex w-100 justify-content-between align-items-center mb-1">
+                        <h6 class="mb-0 fw-bold text-dark">${item.nama}</h6>
+                        <span class="badge bg-warning text-dark small">${item.waktu.split(' ')[0]}</span>
+                    </div>
+                    <p class="mb-1 small fw-medium text-primary"><i class="bi bi-file-earmark-check-fill"></i> ${item.dokumen}</p>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <small class="text-muted" style="font-size: 0.70rem;"><i class="bi bi-person-badge"></i> Petugas: ${item.admin}</small>
+                        <small class="text-muted fw-bold" style="font-size: 0.70rem;">${item.idTrx}</small>
+                    </div>
+                </div>`;
+            });
+            listContainer.innerHTML = html;
+        } else {
+            badge.style.display = 'none';
+            listContainer.innerHTML = `<div class="text-center py-5 text-muted"><i class="bi bi-check2-circle text-success" style="font-size: 3rem;"></i><h6 class="fw-bold text-dark mt-2">Brankas Aman!</h6><small>Tidak ada dokumen pelaut yang sedang dipinjam.</small></div>`;
+        }
+    }
+
+    function renderLogPerubahan(data) {
+        const tbody = document.getElementById('table-body-log');
+        if(!tbody) return;
+        if(!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-5"><i class="bi bi-inbox fs-2 d-block mb-2"></i>Belum ada riwayat aktivitas yang tercatat.</td></tr>';
+            return;
+        }
+        let html = '';
+        const batasTampil = 50; 
+        data.slice(0, batasTampil).forEach(row => {
+            let warnaModul = "bg-secondary";
+            let teksModul = (row[3] || "").toLowerCase();
+            if(teksModul.includes("profil")) warnaModul = "bg-primary";
+            else if(teksModul.includes("dokumen")) warnaModul = "bg-warning text-dark";
+            else if(teksModul.includes("status") || teksModul.includes("mutasi")) warnaModul = "bg-danger";
+            else if(teksModul.includes("database")) warnaModul = "bg-info text-dark";
+            html += `
+            <tr>
+                <td class="ps-4 fw-bold text-muted" style="font-size: 0.85rem;">${row[0]}</td>
+                <td><span class="badge bg-light text-dark border shadow-sm">${row[1]}</span></td>
+                <td class="fw-bold text-dark">${row[2]}</td>
+                <td><span class="badge ${warnaModul} shadow-sm">${row[3]}</span></td>
+                <td class="text-secondary small">${row[4]}</td>
+            </tr>`;
+        });
+        if(data.length > batasTampil) {
+            html += `<tr><td colspan="5" class="text-center py-3 bg-light"><span class="text-muted fw-bold small">Menampilkan ${batasTampil} aktivitas terbaru.</span></td></tr>`;
+        }
+        tbody.innerHTML = html;
+    }
+
+    // FUNGSI NAVIGASI MODAL
+    function bukaProfilDariNotif(kodeCrew) {
+        let modalInst = bootstrap.Modal.getInstance(document.getElementById('modalNotifikasi'));
+        if(modalInst) modalInst.hide();
+        if(typeof lihatDetail === 'function') lihatDetail(kodeCrew);
+    }
+    function bukaProfilDariNotifKontrak(kodeCrew) {
+        let modalInst = bootstrap.Modal.getInstance(document.getElementById('modalNotifKontrak'));
+        if(modalInst) modalInst.hide();
+        if(typeof lihatDetail === 'function') lihatDetail(kodeCrew);
+    }
+
+    // ==========================================
+    // FUNGSI JALAN PINTAS DARI LONCENG DASHBOARD
+    // ==========================================
+    function lompatKeMonitorDokumen() {
+        // 1. Pindah ke halaman DocControl
+        loadPage('DocControl');
+        
+        // 2. Beri waktu sedikit agar DOM halaman DocControl selesai dirender oleh browser
+        setTimeout(() => {
+            const tabTarget = document.getElementById('tab-expired');
+            if (tabTarget) {
+                // Gunakan API resmi Bootstrap 5 untuk pindah tab
+                const bsTab = new bootstrap.Tab(tabTarget);
+                bsTab.show();
+                
+                // Pastikan data dokumen expired langsung diload
+                if (typeof loadDataExpiredDocs === "function") {
+                    loadDataExpiredDocs();
+                }
+            }
+        }, 150); // Jeda 150 milidetik sudah cukup aman
+        
+        // 3. Update warna menu aktif di Sidebar agar sinkron (Opsional tapi bikin rapi)
+        document.querySelectorAll('#sidebar-wrapper .list-group-item').forEach(link => {
+            link.classList.remove('active-nav');
+            if (link.getAttribute('onclick') && link.getAttribute('onclick').includes("DocControl")) {
+                link.classList.add('active-nav');
+            }
+        });
+    }
+</script>

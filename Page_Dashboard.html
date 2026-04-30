@@ -1,0 +1,260 @@
+<div id="view-Dashboard" class="page-view">
+    
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+        <div>
+            <h2 class="fw-bolder mb-0 text-dark" style="letter-spacing: -0.5px;">Executive Dashboard</h2>
+            <span class="text-muted fw-medium small"><i class="bi bi-clock me-1"></i> <span id="realtime-clock">Memuat waktu...</span></span>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            
+            <button class="btn btn-light position-relative shadow-sm border-0 p-2 d-flex align-items-center justify-content-center" 
+                    data-bs-toggle="modal" data-bs-target="#modalNotifPinjaman" style="width: 42px; height: 42px; border-radius: 12px;" title="Dokumen Keluar">
+                <i class="bi bi-folder-symlink-fill fs-5 text-primary"></i>
+                <span id="badge-notif-pinjaman" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light" style="display: none; font-size: 0.70rem;">0</span>
+            </button>
+
+            <button class="btn btn-light position-relative shadow-sm border-0 p-2 d-flex align-items-center justify-content-center" 
+                    data-bs-toggle="modal" data-bs-target="#modalNotifKontrak" style="width: 42px; height: 42px; border-radius: 12px;" title="Akhir Kontrak">
+                <i class="bi bi-hourglass-split fs-5 text-danger"></i>
+                <span id="badge-notif-kontrak" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light" style="display: none; font-size: 0.70rem;">0</span>
+            </button>
+
+            <button class="btn btn-light position-relative shadow-sm border-0 p-2 d-flex align-items-center justify-content-center" 
+                    onclick="lompatKeMonitorDokumen()" style="width: 42px; height: 42px; border-radius: 12px;" title="Peringatan Dokumen">
+                <i class="bi bi-bell-fill fs-5 text-warning"></i>
+                <span id="badge-notif" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light" style="display: none; font-size: 0.70rem;">0</span>
+            </button>
+
+            <button class="btn btn-dark btn-sm fw-bold shadow-sm px-4 py-2 rounded-pill" onclick="refreshDashboardKeren()">
+                <i class="bi bi-arrow-clockwise me-1"></i> Segarkan Data
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="card dashboard-card shadow-sm border-0 rounded-4 h-100">
+                <div class="card-body d-flex align-items-center p-4">
+                    <div class="icon-box bg-primary bg-opacity-10 text-primary rounded-3 p-3 me-3"><i class="bi bi-people-fill fs-3"></i></div>
+                    <div>
+                        <p class="text-muted mb-0 fw-bold" style="font-size: 0.75rem; letter-spacing: 0.5px;">TOTAL DATABASE</p>
+                        <h3 class="fw-bolder mb-0 text-dark" id="dash-total">0</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card dashboard-card shadow-sm border-0 rounded-4 h-100">
+                <div class="card-body d-flex align-items-center p-4">
+                    <div class="icon-box bg-success bg-opacity-10 text-success rounded-3 p-3 me-3"><i class="bi bi-globe fs-3"></i></div>
+                    <div>
+                        <p class="text-muted mb-0 fw-bold" style="font-size: 0.75rem; letter-spacing: 0.5px;">KRU ON BOARD</p>
+                        <h3 class="fw-bolder mb-0 text-dark" id="dash-onboard">0</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card dashboard-card shadow-sm border-0 rounded-4 h-100">
+                <div class="card-body d-flex align-items-center p-4">
+                    <div class="icon-box bg-warning bg-opacity-10 text-warning rounded-3 p-3 me-3"><i class="bi bi-person-bounding-box fs-3"></i></div>
+                    <div>
+                        <p class="text-muted mb-0 fw-bold" style="font-size: 0.75rem; letter-spacing: 0.5px;">KRU STANDBY</p>
+                        <h3 class="fw-bolder mb-0 text-dark" id="dash-standby">0</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="card dashboard-card shadow-sm border-0 rounded-4 h-100">
+                <div class="card-body d-flex align-items-center p-4">
+                    <div class="icon-box bg-info bg-opacity-10 text-info rounded-3 p-3 me-3"><i class="bi bi-pin-angle-fill fs-3"></i></div>
+                    <div>
+                        <p class="text-muted mb-0 fw-bold" style="font-size: 0.75rem; letter-spacing: 0.5px;">PROSES PLOTTING</p>
+                        <h3 class="fw-bolder mb-0 text-dark" id="dash-plotting">0</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mb-5">
+        
+        <div class="col-lg-8 d-flex flex-column gap-4">
+            
+            <div class="card dashboard-card shadow-sm border-0 rounded-4 flex-grow-1">
+                <div class="card-header bg-white border-0 pt-4 pb-0 px-4">
+                    <h6 class="fw-bold text-dark mb-0"><i class="bi bi-bar-chart-fill text-primary me-2"></i>Rasio Status Kru Aktif</h6>
+                </div>
+                <div class="card-body p-4">
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="fw-bold text-muted small">On Board (Sedang Berlayar)</span>
+                            <span class="fw-bold text-success small" id="bar-txt-onboard">0%</span>
+                        </div>
+                        <div class="progress" style="height: 12px; border-radius: 10px;">
+                            <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" id="bar-onboard" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="fw-bold text-muted small">Standby (Tersedia / Di Darat)</span>
+                            <span class="fw-bold text-warning small" id="bar-txt-standby">0%</span>
+                        </div>
+                        <div class="progress" style="height: 12px; border-radius: 10px;">
+                            <div class="progress-bar bg-warning" id="bar-standby" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="fw-bold text-muted small">Plotting (Persiapan Naik)</span>
+                            <span class="fw-bold text-info small" id="bar-txt-plotting">0%</span>
+                        </div>
+                        <div class="progress" style="height: 12px; border-radius: 10px;">
+                            <div class="progress-bar bg-info" id="bar-plotting" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-bottom border-warning border-3">
+                        <div class="card-body d-flex align-items-center p-3">
+                            <div class="bg-warning bg-opacity-10 p-3 rounded-3 text-warning me-3">
+                                <i class="bi bi-briefcase-fill fs-3"></i>
+                            </div>
+                            <div>
+                                <div class="text-muted small fw-bold mb-1" style="letter-spacing: 0.5px;">MITRA PRINCIPAL</div>
+                                <h3 class="fw-bolder text-dark mb-0" id="dash-count-principal">
+                                    <span class="spinner-border spinner-border-sm text-warning"></span>
+                                </h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-sm rounded-4 h-100 bg-white border-bottom border-info border-3">
+                        <div class="card-body d-flex align-items-center p-3">
+                            <div class="bg-info bg-opacity-10 p-3 rounded-3 text-info me-3">
+                                <i class="bi bi-ship fs-3"></i>
+                            </div>
+                            <div>
+                                <div class="text-muted small fw-bold mb-1" style="letter-spacing: 0.5px;">ARMADA AKTIF</div>
+                                <h3 class="fw-bolder text-dark mb-0" id="dash-count-kapal">
+                                    <span class="spinner-border spinner-border-sm text-info"></span>
+                                </h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card dashboard-card shadow-sm border-0 h-100 text-white" style="background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%); border-radius: 16px;">
+                <div class="card-body p-4 d-flex flex-column justify-content-center">
+                    <h5 class="fw-bold mb-3"><i class="bi bi-lightning-charge-fill text-warning me-2"></i>Aksi Cepat</h5>
+                    <p class="small text-white-50 mb-4">Akses modul penting PPM dengan satu klik untuk mempercepat alur kerja harian Anda.</p>
+                    
+                    <div class="d-grid gap-3">
+                        <button class="btn btn-light text-primary fw-bold rounded-pill text-start px-4 py-3 shadow-sm" onclick="bukaKeTambahKru()">
+                            <i class="bi bi-person-plus-fill me-2"></i> Input Kru Baru
+                        </button>
+                        <button class="btn btn-light text-primary fw-bold rounded-pill text-start px-4 py-3 shadow-sm" onclick="loadPage('CrewDeploy'); loadDataDeploy();">
+                            <i class="bi bi-journal-check me-2"></i> Buka Laporan Mutasi
+                        </button>
+                        <button class="btn btn-outline-light fw-bold rounded-pill text-start px-4 py-3" onclick="loadPage('Blacklist')">
+                            <i class="bi bi-shield-slash-fill me-2"></i> Lihat Daftar Blacklist
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <hr class="text-muted opacity-10 mb-5">
+
+    <div id="section-LogPerubahan">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+            <div>
+                <h4 class="fw-bold text-dark mb-1"><i class="bi bi-clock-history text-primary me-2"></i>Riwayat Aktivitas</h4>
+                <span class="text-muted small">Catatan perubahan data, penghapusan, dan pembaruan sistem.</span>
+            </div>
+            <button class="btn btn-outline-primary rounded-pill shadow-sm fw-bold px-4" onclick="loadLogData()">
+                <i class="bi bi-arrow-clockwise me-1"></i> Segarkan Log
+            </button>
+        </div>
+
+        <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+            <div class="table-responsive bg-white" style="max-height: 450px; overflow-y: auto;">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light position-sticky top-0" style="z-index: 1;">
+                        <tr class="text-nowrap text-muted small">
+                            <th class="ps-4 fw-bold border-bottom-0 py-3">WAKTU</th>
+                            <th class="fw-bold border-bottom-0 py-3">KODE CREW</th>
+                            <th class="fw-bold border-bottom-0 py-3">NAMA KRU</th>
+                            <th class="fw-bold border-bottom-0 py-3">MODUL</th>
+                            <th class="fw-bold border-bottom-0 py-3">AKTIVITAS DETAIL</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body-log">
+                        <tr>
+                            <td colspan="5" class="text-center py-5 text-muted">
+                                <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                                Memuat riwayat perubahan...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalNotifKontrak" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg rounded-4">
+                <div class="modal-header bg-danger text-white border-0">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-stopwatch-fill me-2"></i> Peringatan Akhir Kontrak</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0 bg-light">
+                    <div class="alert alert-danger m-3 border-0 shadow-sm py-2 text-center" style="font-size: 0.85rem;">
+                        <i class="bi bi-info-circle-fill"></i> Menampilkan kru yang telah berlayar <strong>lebih dari 9 bulan</strong>.
+                    </div>
+                    <div class="list-group list-group-flush" id="list-notif-kontrak">
+                        <div class="text-center py-5 text-muted">
+                            <div class="spinner-border spinner-border-sm mb-2 text-danger"></div>
+                            <div>Mengecek data kontrak...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalNotifPinjaman" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg rounded-4">
+                <div class="modal-header bg-primary text-white border-0">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-folder-symlink-fill me-2"></i> Dokumen Sedang Keluar</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0 bg-light">
+                    <div class="alert alert-primary m-3 border-0 shadow-sm py-2 text-center" style="font-size: 0.85rem;">
+                        <i class="bi bi-info-circle-fill"></i> Menampilkan dokumen yang <strong>belum dikembalikan</strong> ke brankas.
+                    </div>
+                    <div class="list-group list-group-flush" id="list-notif-pinjaman">
+                        <div class="text-center py-5 text-muted">
+                            <div class="spinner-border spinner-border-sm mb-2 text-primary"></div>
+                            <div>Melacak dokumen...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>

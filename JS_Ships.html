@@ -1,0 +1,354 @@
+<script>
+    // ==========================================
+    // JS CLIENT: PRINCIPAL
+    // ==========================================
+    function loadDataPrincipal() {
+        const tbody = document.getElementById('table-body-principal');
+        if(!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5"><span class="spinner-border spinner-border-sm text-primary"></span> Memuat data principal...</td></tr>';
+        
+        google.script.run.withSuccessHandler(data => {
+            if(!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-5"><i class="bi bi-briefcase fs-1 d-block mb-2 text-light"></i>Belum ada data Principal.</td></tr>'; return;
+            }
+            let html = '';
+            data.forEach(row => {
+                let badge = row[6] === 'AKTIF' ? 'bg-success' : 'bg-danger';
+                
+                html += `
+                <tr class="align-middle">
+                    <td class="ps-4">
+                        <div class="d-flex align-items-center">
+                            <div class="bg-warning bg-opacity-10 text-warning rounded-circle d-flex justify-content-center align-items-center me-3 flex-shrink-0" style="width: 38px; height: 38px;">
+                                <i class="bi bi-buildings-fill fs-5"></i>
+                            </div>
+                            <div>
+                                <div class="fw-bolder text-dark" style="font-size: 0.95rem;">${row[1]}</div>
+                                <div class="text-muted" style="font-size: 0.70rem; font-family: monospace;">ID: ${row[0]}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="fw-bold text-secondary" style="font-size: 0.85rem;">
+                            <i class="bi bi-geo-alt-fill text-danger me-1"></i>${row[2] || '-'}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="fw-bold text-dark" style="font-size: 0.85rem;">
+                            <i class="bi bi-person-circle text-primary me-1"></i>${row[3] || '-'}
+                        </div>
+                        <div class="text-muted mt-1" style="font-size: 0.75rem;">
+                            <i class="bi bi-telephone-fill text-secondary me-1"></i>${row[4] || '-'}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="fw-bold text-secondary" style="font-size: 0.85rem;">
+                            <i class="bi bi-calendar-check text-info me-1"></i>${row[5] || '-'}
+                        </div>
+                    </td>
+                    <td>
+                        <div class="mb-1"><span class="badge ${badge} shadow-sm px-3 py-1" style="font-size: 0.70rem;">${row[6]}</span></div>
+                    </td>
+                    <td class="text-end pe-4 text-nowrap">
+                        <button class="btn btn-sm btn-warning shadow-sm fw-bold text-dark me-1 px-2" onclick="lihatDetailPrincipal('${row[1]}')" title="Lihat Portfolio"><i class="bi bi-eye-fill"></i> Portfolio</button>
+                        <button class="btn btn-sm btn-outline-primary shadow-sm me-1 px-2" onclick='editPrincipal(${JSON.stringify(row)})' title="Edit"><i class="bi bi-pencil-square"></i></button>
+                        <button class="btn btn-sm btn-outline-danger shadow-sm px-2" onclick="hapusPrincipal('${row[0]}','${row[1]}')" title="Hapus"><i class="bi bi-trash"></i></button>
+                    </td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }).getPrincipalsData();
+    }
+
+    function modalTambahPrincipal() {
+        document.getElementById('form-principal').reset();
+        document.getElementById('prc_id').value = "";
+        document.getElementById('titleModalPrincipal').innerText = "Tambah Principal Baru";
+        new bootstrap.Modal(document.getElementById('modalFormPrincipal')).show();
+    }
+
+    function editPrincipal(row) {
+        document.getElementById('prc_id').value = row[0];
+        document.getElementById('prc_nama').value = row[1];
+        document.getElementById('prc_negara').value = row[2];
+        document.getElementById('prc_pic').value = row[3];
+        document.getElementById('prc_kontak').value = row[4];
+        document.getElementById('prc_kontrak').value = row[5];
+        document.getElementById('prc_status').value = row[6];
+        document.getElementById('titleModalPrincipal').innerText = "Edit Principal";
+        new bootstrap.Modal(document.getElementById('modalFormPrincipal')).show();
+    }
+
+    function simpanDataPrincipal() {
+        const btn = document.getElementById('btn-save-principal');
+        btn.innerHTML = 'Menyimpan...'; btn.disabled = true;
+        const payload = {
+            id_principal: document.getElementById('prc_id').value,
+            nama_principal: document.getElementById('prc_nama').value,
+            negara: document.getElementById('prc_negara').value,
+            pic: document.getElementById('prc_pic').value,
+            kontak: document.getElementById('prc_kontak').value,
+            kontrak: document.getElementById('prc_kontrak').value,
+            status: document.getElementById('prc_status').value
+        };
+        google.script.run.withSuccessHandler(res => {
+            Swal.fire('Sukses', res, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('modalFormPrincipal')).hide();
+            btn.innerHTML = 'Simpan'; btn.disabled = false;
+            loadDataPrincipal();
+        }).withFailureHandler(err => {
+            Swal.fire('Error', err.message, 'error'); btn.innerHTML = 'Simpan'; btn.disabled = false;
+        }).simpanPrincipalData(payload);
+    }
+
+    function hapusPrincipal(id, nama) {
+        Swal.fire({title: 'Hapus Principal?', text: "Semua kapal yang terikat mungkin perlu disesuaikan manual.", icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus!'}).then(r => {
+            if(r.isConfirmed) {
+                Swal.fire({title: 'Menghapus...', didOpen: ()=>Swal.showLoading()});
+                google.script.run.withSuccessHandler(res => { Swal.fire('Terhapus!', res, 'success'); loadDataPrincipal(); }).hapusPrincipalData(id, nama);
+            }
+        });
+    }
+
+    // ==========================================
+    // JS CLIENT: KAPAL
+    // ==========================================
+    function loadDataKapal() {
+        const tbody = document.getElementById('table-body-kapal');
+        if(!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5"><span class="spinner-border spinner-border-sm text-info"></span> Memuat armada kapal...</td></tr>';
+        
+        google.script.run.withSuccessHandler(data => {
+            if(!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-5"><i class="bi bi-ship fs-1 d-block mb-2 text-light"></i>Belum ada data Kapal.</td></tr>'; return;
+            }
+            let html = '';
+            data.forEach(row => {
+                let badge = row[7] === 'AKTIF' ? 'bg-success' : 'bg-danger';
+                
+                html += `
+                <tr class="align-middle">
+                    <td class="ps-4">
+                        <div class="fw-bolder text-dark" style="font-size: 0.95rem;">${row[1]}</div>
+                        <div class="text-muted" style="font-size: 0.70rem; font-family: monospace;">ID: ${row[0]}</div>
+                    </td>
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex justify-content-center align-items-center me-3 flex-shrink-0" style="width: 32px; height: 32px;">
+                                <i class="bi bi-building-fill"></i>
+                            </div>
+                            <div class="text-dark fw-bold" style="font-size: 0.80rem; line-height: 1.3; max-width: 250px;">
+                                ${row[2]}
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="fw-bold text-secondary" style="font-size: 0.85rem;">${row[3] || '-'}</div>
+                        <div class="text-muted mt-1" style="font-size: 0.75rem;"><i class="bi bi-flag-fill text-danger me-1"></i>${row[4] || '-'}</div>
+                    </td>
+                    <td>
+                        <div class="mb-1"><span class="badge bg-light text-dark border shadow-sm"><i class="bi bi-people-fill text-secondary me-1"></i>${row[6] || 0} Slot</span></div>
+                        <div class="text-muted fw-bold" style="font-size: 0.75rem;">GRT: ${row[5] || '-'}</div>
+                    </td>
+                    <td>
+                        <div class="mb-1"><span class="badge ${badge} shadow-sm px-3 py-1" style="font-size: 0.70rem;">${row[7]}</span></div>
+                        <div class="text-muted fw-bold mt-1" style="font-size: 0.75rem;">Thn: ${row[8] || '-'}</div>
+                    </td>
+                    <td class="text-end pe-4 text-nowrap">
+                        <button class="btn btn-sm btn-success shadow-sm fw-bold me-1 px-2" onclick="lihatKruDiKapal('${row[1]}', '${row[6]}')" title="Lihat Kru Onboard"><i class="bi bi-eye-fill"></i> Kru</button>
+                        <button class="btn btn-sm btn-outline-primary shadow-sm me-1 px-2" onclick='editKapal(${JSON.stringify(row)})' title="Edit"><i class="bi bi-pencil-square"></i></button>
+                        <button class="btn btn-sm btn-outline-danger shadow-sm px-2" onclick="hapusKapal('${row[0]}','${row[1]}')" title="Hapus"><i class="bi bi-trash"></i></button>
+                    </td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }).getVesselsData();
+    }
+
+    // FUNGSI RELASIONAL: Tarik nama Principal ke Dropdown
+    function muatDropdownPrincipal() {
+        const sel = document.getElementById('vsl_principal');
+        sel.innerHTML = '<option value="">Sedang memuat data...</option>';
+        google.script.run.withSuccessHandler(list => {
+            if(list.length === 0) {
+                sel.innerHTML = '<option value="">(Belum ada Principal Aktif di Database)</option>'; return;
+            }
+            let opt = '<option value="">-- Pilih Principal --</option>';
+            list.forEach(p => opt += `<option value="${p}">${p}</option>`);
+            sel.innerHTML = opt;
+        }).getDropdownPrincipalAktif();
+    }
+
+    function modalTambahKapal() {
+        document.getElementById('form-kapal').reset();
+        document.getElementById('vsl_id').value = "";
+        document.getElementById('titleModalKapal').innerText = "Tambah Armada Baru";
+        muatDropdownPrincipal();
+        new bootstrap.Modal(document.getElementById('modalFormKapal')).show();
+    }
+
+    function editKapal(row) {
+        document.getElementById('vsl_id').value = row[0];
+        document.getElementById('vsl_nama').value = row[1];
+        document.getElementById('vsl_jenis').value = row[3];
+        document.getElementById('vsl_bendera').value = row[4];
+        document.getElementById('vsl_grt').value = row[5];
+        document.getElementById('vsl_kapasitas').value = row[6];
+        document.getElementById('vsl_status').value = row[7];
+        document.getElementById('vsl_tahun').value = row[8] || '';
+        
+        // Load dropdown dulu, baru set nilainya
+        const sel = document.getElementById('vsl_principal');
+        sel.innerHTML = '<option value="">Memuat...</option>';
+        google.script.run.withSuccessHandler(list => {
+            let opt = `<option value="${row[2]}">${row[2]} (Current)</option>`;
+            list.forEach(p => { if(p !== row[2]) opt += `<option value="${p}">${p}</option>`; });
+            sel.innerHTML = opt;
+            sel.value = row[2];
+        }).getDropdownPrincipalAktif();
+
+        document.getElementById('titleModalKapal').innerText = "Edit Armada";
+        new bootstrap.Modal(document.getElementById('modalFormKapal')).show();
+    }
+
+    function simpanDataKapal() {
+        const btn = document.getElementById('btn-save-kapal');
+        btn.innerHTML = 'Menyimpan...'; btn.disabled = true;
+        const payload = {
+            id_kapal: document.getElementById('vsl_id').value,
+            nama_kapal: document.getElementById('vsl_nama').value,
+            principal: document.getElementById('vsl_principal').value,
+            jenis_kapal: document.getElementById('vsl_jenis').value,
+            bendera: document.getElementById('vsl_bendera').value,
+            grt: document.getElementById('vsl_grt').value,
+            kapasitas: document.getElementById('vsl_kapasitas').value,
+            status: document.getElementById('vsl_status').value,
+            tahun_kapal: document.getElementById('vsl_tahun').value
+        };
+        google.script.run.withSuccessHandler(res => {
+            Swal.fire('Sukses', res, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('modalFormKapal')).hide();
+            btn.innerHTML = 'Simpan Kapal'; btn.disabled = false;
+            loadDataKapal();
+        }).withFailureHandler(err => {
+            Swal.fire('Error', err.message, 'error'); btn.innerHTML = 'Simpan Kapal'; btn.disabled = false;
+        }).simpanVesselData(payload);
+    }
+
+    function hapusKapal(id, nama) {
+        Swal.fire({title: 'Hapus Kapal?', text: `Hapus ${nama} dari armada?`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya, Hapus!'}).then(r => {
+            if(r.isConfirmed) {
+                Swal.fire({title: 'Menghapus...', didOpen: ()=>Swal.showLoading()});
+                google.script.run.withSuccessHandler(res => { Swal.fire('Terhapus!', res, 'success'); loadDataKapal(); }).hapusVesselData(id, nama);
+            }
+        });
+    }
+
+    // ==========================================
+    // FUNGSI MELIHAT KRU YANG SEDANG ONBOARD
+    // ==========================================
+    function lihatKruDiKapal(namaKapal, kapasitas) {
+        document.getElementById('onboard-nama-kapal').innerText = namaKapal;
+        const tbody = document.getElementById('table-body-kru-onboard');
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-5"><span class="spinner-border spinner-border-sm text-primary"></span> Melacak kru di database...</td></tr>';
+        
+        new bootstrap.Modal(document.getElementById('modalKruOnboard')).show();
+
+        google.script.run.withSuccessHandler(res => {
+            if(res.error) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">Error: ${res.error}</td></tr>`; return;
+            }
+            
+            const totalKru = res.length;
+            const slot = kapasitas ? kapasitas : 0;
+            
+            // Hitung status slot
+            let teksSlot = `Mengisi ${totalKru} dari ${slot} Slot Kapasitas`;
+            let classBadge = totalKru < slot ? "bg-warning text-dark" : (totalKru == slot ? "bg-success" : "bg-danger");
+            if(slot == 0) { teksSlot = `Total ${totalKru} Kru Onboard`; classBadge = "bg-primary"; }
+            
+            document.getElementById('onboard-status-slot').innerText = teksSlot;
+            document.getElementById('onboard-status-slot').className = `badge ${classBadge} px-3 py-2 shadow-sm`;
+
+            if(totalKru === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-5"><i class="bi bi-person-x fs-1 d-block mb-2"></i>Tidak ada kru PPM yang tercatat Onboard di kapal ini.</td></tr>';
+                return;
+            }
+
+            let html = '';
+            res.forEach((k, idx) => {
+                html += `
+                <tr>
+                    <td class="ps-3 fw-bold">${idx + 1}</td>
+                    <td><span class="fw-bold text-dark">${k.nama}</span><br><small class="text-muted">${k.kode}</small></td>
+                    <td><span class="badge bg-secondary">${k.jabatan}</span></td>
+                    <td class="fw-medium text-primary">${k.sign_on}</td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+
+        }).getKruOnboardByKapal(namaKapal);
+    }
+
+    // ==========================================
+    // FUNGSI MELIHAT PORTFOLIO PRINCIPAL (KAPAL & KRU)
+    // ==========================================
+    window.lihatDetailPrincipal = function(namaPrincipal) {
+        document.getElementById('detail-prc-nama').innerText = namaPrincipal;
+        const tbodyKru = document.getElementById('table-body-kru-principal');
+        const listKapal = document.getElementById('list-kapal-principal');
+        
+        tbodyKru.innerHTML = '<tr><td colspan="4" class="text-center py-5"><span class="spinner-border spinner-border-sm text-primary"></span> Melacak data...</td></tr>';
+        listKapal.innerHTML = '<div class="text-center py-5"><span class="spinner-border spinner-border-sm text-info"></span></div>';
+        
+        new bootstrap.Modal(document.getElementById('modalDetailPrincipal')).show();
+
+        google.script.run.withSuccessHandler(res => {
+            if(res.error) {
+                tbodyKru.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">Error: ${res.error}</td></tr>`; 
+                listKapal.innerHTML = '';
+                return;
+            }
+            
+            // 1. Update Badge Statistik Atas
+            document.getElementById('detail-prc-kapal').innerHTML = `<i class="bi bi-ship me-1"></i> ${res.kapal.length} Kapal`;
+            document.getElementById('detail-prc-kru').innerHTML = `<i class="bi bi-people-fill me-1"></i> ${res.totalKru} Kru Onboard`;
+            document.getElementById('detail-prc-kapasitas').innerHTML = `<i class="bi bi-pie-chart-fill me-1"></i> Max Kapasitas: ${res.totalKapasitas} Slot`;
+
+            // 2. Render Daftar Kapal (Kolom Kiri)
+            if(res.kapal.length === 0) {
+                listKapal.innerHTML = '<div class="alert alert-light small text-muted text-center border">Belum ada kapal terdaftar untuk Principal ini.</div>';
+            } else {
+                let htmlKapal = '';
+                res.kapal.forEach(k => {
+                    htmlKapal += `
+                    <div class="list-group-item px-3 py-3 border-0 border-bottom">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="fw-bold text-dark" style="font-size: 0.95rem;">${k.nama_asli}</span>
+                            <span class="badge bg-light text-dark border shadow-sm" style="font-size: 0.70rem;">${k.kapasitas} Slot</span>
+                        </div>
+                        <small class="text-muted fw-medium"><i class="bi bi-tag-fill me-1"></i>${k.jenis}</small>
+                    </div>`;
+                });
+                listKapal.innerHTML = htmlKapal;
+            }
+
+            // 3. Render Daftar Kru (Kolom Kanan)
+            if(res.totalKru === 0) {
+                tbodyKru.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-5"><i class="bi bi-person-x fs-1 d-block mb-2 text-secondary"></i>Belum ada kru yang berlayar di bawah Principal ini.</td></tr>';
+            } else {
+                let htmlKru = '';
+                res.kru.forEach((k, idx) => {
+                    htmlKru += `
+                    <tr>
+                        <td class="ps-3 fw-bold text-muted">${idx + 1}</td>
+                        <td><span class="fw-bold text-dark" style="font-size: 0.9rem;">${k.nama}</span><br><small class="text-muted" style="font-size: 0.75rem;">${k.kode}</small></td>
+                        <td><span class="fw-bold text-primary" style="font-size: 0.85rem;">${k.kapal}</span></td>
+                        <td><span class="badge bg-secondary">${k.jabatan}</span><br><small class="text-muted" style="font-size: 0.70rem;">Naik: ${k.sign_on}</small></td>
+                    </tr>`;
+                });
+                tbodyKru.innerHTML = htmlKru;
+            }
+        }).getArmadaDanKruByPrincipal(namaPrincipal);
+    }
+</script>

@@ -1,0 +1,169 @@
+<style>
+    :root {
+        --primary-color: #4361ee;
+        --secondary-color: #6c757d;
+        --dark-modern: #1e293b;
+        --light-modern: #f4f7fe;
+        --card-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025);
+    }
+
+    body {
+        font-family: 'Inter', sans-serif;
+        background-color: var(--light-modern);
+        color: #334155;
+        overflow-x: hidden;
+    }
+
+    /* Layout Sidebar & Wrapper */
+    #wrapper {
+        min-height: 100vh;
+        display: flex;
+        align-items: flex-start;
+        position: relative;
+    }
+    
+    #sidebar-wrapper {
+        width: 260px;
+        background-color: var(--dark-modern);
+        transition: margin .3s ease-in-out;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow-y: auto;
+        z-index: 1050; /* Z-index tinggi agar selalu di atas */
+    }
+    
+    #sidebar-wrapper::-webkit-scrollbar {
+        width: 5px;
+    }
+    #sidebar-wrapper::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    #sidebar-wrapper::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 10px;
+    }
+    
+    #page-content-wrapper {
+        flex: 1;
+        background-color: var(--light-modern);
+        min-width: 0; /* Mencegah konten meluber di flexbox */
+    }
+
+    /* Overlay Gelap untuk HP */
+    #sidebar-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1040;
+        backdrop-filter: blur(3px);
+    }
+
+    /* Styling Menu Sidebar */
+    .list-group-item {
+        border: none;
+        padding: 15px 25px;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        opacity: 0.7;
+    }
+    .list-group-item:hover {
+        opacity: 1;
+        color: var(--primary-color) !important;
+        background-color: rgba(255,255,255,0.05) !important;
+    }
+    .list-group-item.active-nav {
+        opacity: 1;
+        border-right: 4px solid var(--primary-color);
+        background-color: rgba(67, 97, 238, 0.1) !important;
+        color: #fff !important;
+    }
+
+    /* Modenisasi Kartu */
+    .card {
+        border: none;
+        border-radius: 16px;
+        box-shadow: var(--card-shadow);
+        background-color: #ffffff;
+        transition: transform 0.2s ease;
+    }
+    .card-stat:hover {
+        transform: translateY(-5px);
+    }
+
+    /* Tabel yang lebih bersih */
+    .table { margin-bottom: 0; }
+    .table th {
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.8rem;
+        letter-spacing: 0.5px;
+        color: #64748b;
+        border-bottom: 2px solid #e2e8f0;
+    }
+    .table td {
+        vertical-align: middle;
+        font-size: 0.9rem;
+        color: #475569;
+        text-transform: uppercase; /* Baris ajaib untuk mengubah semua teks jadi kapital */
+    }
+    .table-modern-wrapper {
+        border-radius: 16px;
+        overflow: hidden;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+    }
+
+    /* Tombol melengkung elegan */
+    .btn { border-radius: 8px; font-weight: 500; letter-spacing: 0.3px; padding: 8px 16px; }
+    .btn-sm { padding: 5px 12px; font-size: 0.8rem; }
+    .badge { border-radius: 20px; padding: 6px 12px; font-weight: 500; }
+
+    /* Modals */
+    .modal-content { border-radius: 16px; border: none; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+    .modal-header { border-top-left-radius: 16px; border-top-right-radius: 16px; }
+
+    /* Efek Hover Keren untuk Kartu Dasbor */
+    .dashboard-card { border-radius: 16px; transition: all 0.3s ease; border: none; }
+    .dashboard-card:hover { transform: translateY(-5px); box-shadow: 0 15px 30px rgba(0,0,0,0.08) !important; }
+    .icon-box { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 16px; }
+    
+    /* Warna Gradient Modern */
+    .bg-gradient-primary { background: linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%); color: white; }
+    .bg-gradient-success { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; }
+    .bg-gradient-warning { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; }
+    .bg-gradient-info { background: linear-gradient(135deg, #0dcaf0 0%, #0891b2 100%); color: white; }
+
+    /* ======================================= */
+    /* RESPONSIVE MOBILE HANDLING */
+    /* ======================================= */
+    @media (max-width: 992px) {
+        #sidebar-wrapper {
+            position: fixed; /* Sidebar mengambang di HP */
+            margin-left: -260px; /* Sembunyikan ke kiri secara default */
+            box-shadow: 4px 0 15px rgba(0,0,0,0.2);
+        }
+        
+        /* Saat tombol diklik, geser sidebar masuk dan tampilkan background gelap */
+        #wrapper.toggled #sidebar-wrapper {
+            margin-left: 0;
+        }
+        #wrapper.toggled #sidebar-overlay {
+            display: block;
+        }
+    }
+
+    /* Warna Badge Role di Sidebar */
+    .badge-role-admin {
+        background-color: #dc3545 !important; /* Warna Merah Danger */
+        color: white;
+    }
+    .badge-role-hr {
+        background-color: #17a2b8 !important; /* Warna Biru Info */
+        color: white;
+    }
+</style>

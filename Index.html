@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crew Management System | Panca Pasifik Mandiri</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <?!= include('CSS'); ?>
+</head>
+<body>
+
+    <div class="d-flex" id="wrapper">
+        
+        <div id="sidebar-overlay"></div>
+
+        <div class="bg-dark-modern text-white d-flex flex-column" id="sidebar-wrapper">
+            <div class="sidebar-heading text-center py-4 fs-5 fw-bold border-bottom border-secondary">
+                <i class="bi bi-geo-alt-fill text-primary"></i> PPM System
+            </div>
+            <div class="list-group list-group-flush my-3">
+                <a href="#" class="list-group-item list-group-item-action bg-transparent text-white active-nav" onclick="loadPage('Dashboard'); muatNotifPinjaman(); refreshDashboardKeren();">
+                    <i class="bi bi-grid-1x2-fill me-2"></i> Dashboard
+                </a>
+                <a href="#" class="list-group-item list-group-item-action bg-transparent text-white" onclick="loadPage('CrewList'); loadDataCrew();">
+                    <i class="bi bi-people-fill me-2"></i> Database Crew
+                </a>
+                <a href="#" class="list-group-item list-group-item-action bg-transparent text-white" onclick="loadPage('CrewDeploy'); loadDataDeploy();">
+                    <i class="bi bi-journal-text me-2"></i> Laporan Mutasi
+                </a>
+                <a href="#" class="list-group-item list-group-item-action bg-transparent text-white" onclick="loadPage('DocControl'); muatRiwayatDokumen();">
+                    <i class="bi bi-folder-symlink-fill me-2"></i> Sirkulasi Dokumen
+                </a>
+                <a href="#" class="list-group-item list-group-item-action bg-transparent text-white" onclick="loadPage('Ships'); loadDataPrincipal();">
+                    <i class="bi bi-buildings-fill me-2"></i> Kapal & Principal
+                </a>
+            </div>
+
+            <div class="sidebar-footer p-2 border-top border-secondary border-opacity-25 mt-auto">
+                <div class="d-flex align-items-center justify-content-between p-2 rounded-3 bg-dark bg-opacity-75 shadow-sm border border-secondary border-opacity-25">
+                    <div class="d-flex align-items-center gap-2">
+                        <img id="sidebar-user-photo" src="" alt="User Profile" class="rounded-circle border border-1 border-primary shadow-sm" style="width: 32px; height: 32px; object-fit: cover; background-color: #4361ee;">
+                        
+                        <div class="user-info d-flex align-items-center gap-2">
+                            <span id="sidebar-user-name" class="text-white text-truncate" style="font-size: 0.9rem; max-width: 100px;">Memuat...</span>
+                            <span id="sidebar-user-role-badge" class="badge rounded-pill text-white small" style="font-size: 0.65rem; padding: 0.25em 0.6em;">...</span>
+                        </div>
+                    </div>
+                    
+                    <button class="btn btn-link text-white opacity-50 hover-opacity-100 p-0 fs-5" id="btn-settings-gear" title="System Settings" style="text-decoration: none;" onclick="loadPage('Settings'); muatDataPengguna();">
+                        <i class="bi bi-gear-fill"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="page-content-wrapper" class="bg-light-modern w-100">
+            <nav class="navbar navbar-expand-lg navbar-light bg-white py-3 px-4 shadow-sm d-lg-none mb-4 rounded-bottom-4">
+                <div class="d-flex align-items-center cursor-pointer" id="menu-toggle" style="cursor: pointer;">
+                    <i class="bi bi-list fs-2 text-dark"></i>
+                    <span class="ms-3 fw-bold fs-5">Panca Pasifik Mandiri</span>
+                </div>
+            </nav>
+
+            <div class="container-fluid px-4 py-4" id="app-content">
+                <?!= include('Page_Login'); ?>
+                <?!= include('Page_Dashboard'); ?>
+                <?!= include('Page_CrewList'); ?>
+                <?!= include('Page_CrewDetail'); ?>
+                <?!= include('Page_CrewDeploy'); ?>
+                <?!= include('Page_Settings'); ?>
+                <?!= include('Page_DocControl'); ?>
+                <?!= include('Page_Ships'); ?>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const wrapper = document.getElementById("wrapper");
+            const toggleBtn = document.getElementById("menu-toggle");
+            const overlay = document.getElementById("sidebar-overlay");
+            const sidebarLinks = document.querySelectorAll("#sidebar-wrapper .list-group-item");
+
+            // 1. Tombol Hamburger diklik -> Buka/Tutup
+            if(toggleBtn) {
+                toggleBtn.addEventListener('click', function () {
+                    wrapper.classList.toggle("toggled");
+                });
+            }
+
+            // 2. Klik area gelap (overlay) -> Tutup
+            if(overlay) {
+                overlay.addEventListener('click', function() {
+                    wrapper.classList.remove("toggled");
+                });
+            }
+
+            // 3. Klik menu di sidebar -> Otomatis tutup jika sedang di layar HP
+            sidebarLinks.forEach(link => {
+                link.addEventListener('click', function() {
+                    if (window.innerWidth <= 992) {
+                        wrapper.classList.remove("toggled");
+                    }
+                });
+            });
+        });
+    </script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <?!= include('JS_Global'); ?>
+    <?!= include('JS_Dashboard'); ?>
+    <?!= include('JS_CrewList'); ?>
+    <?!= include('JS_CrewDetail'); ?>
+    <?!= include('JS_CrewDeploy'); ?>
+    <?!= include('JS_DocControl'); ?>
+    <?!= include('JS_Ships'); ?>
+</body>
+</html>

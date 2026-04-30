@@ -1,0 +1,346 @@
+<div id="view-CrewDeploy" class="page-view" style="display: none;">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+    <h2 class="fw-bold text-dark mb-0"><i class="bi bi-journal-text text-primary"></i> Laporan Mutasi & Deployment</h2>
+    
+    <div class="d-flex flex-wrap gap-2">
+      <button class="btn btn-outline-primary fw-bold shadow-sm" onclick="loadDataDeploy()">
+        <i class="bi bi-arrow-clockwise"></i> Refresh
+      </button>
+
+      <button class="btn btn-danger fw-bold shadow-sm" onclick="cetakLaporanPDF()">
+        <i class="bi bi-file-earmark-pdf-fill me-1"></i> Cetak Laporan
+      </button>
+      
+      <div class="dropdown">
+        <button class="btn btn-primary fw-bold shadow-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+          <i class="bi bi-briefcase-fill me-1"></i> Aksi Mutasi
+        </button>
+        <ul class="dropdown-menu border-0 shadow">
+          <li><a class="dropdown-item fw-bold text-dark py-2" href="#" onclick="bukaModalBulkPlotting()"><i class="bi bi-pin-angle-fill text-info me-2"></i>Plotting Rencana Kapal</a></li>
+          <li><a class="dropdown-item fw-bold text-dark py-2" href="#" onclick="bukaModalBulkDeploy()"><i class="bi bi-airplane-fill text-primary me-2"></i>Proses Onboard (Naik)</a></li>
+          <li><a class="dropdown-item fw-bold text-dark py-2" href="#" onclick="bukaModalBulkSignOff()"><i class="bi bi-box-arrow-right text-warning me-2"></i>Proses Sign Off (Turun)</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm bg-success bg-opacity-10">
+        <div class="card-body">
+          <h6 class="text-success fw-bold"><i class="bi bi-airplane"></i> Total Onboard</h6>
+          <h3 class="fw-bold mb-0" id="count-onboard">0</h3>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card border-0 shadow-sm bg-warning bg-opacity-10">
+        <div class="card-body">
+          <h6 class="text-warning fw-bold text-dark"><i class="bi bi-briefcase"></i> Total Sign Off</h6>
+          <h3 class="fw-bold text-dark mb-0" id="count-signoff">0</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-modern mb-4 border-0 shadow-sm bg-white">
+    <div class="card-body p-3">
+      
+      <div class="row g-2 align-items-center">
+        <div class="col-md-9">
+          <div class="input-group shadow-sm">
+            <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+            <input type="text" class="form-control border-start-0 ps-0" id="filter-deploy-search" placeholder="Cari nama kru, rank, atau nama kapal..." oninput="applyFilterDeploy()">
+          </div>
+        </div>
+        <div class="col-md-3">
+          <button class="btn btn-outline-primary fw-bold w-100 shadow-sm" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFilterDeploy">
+            <i class="bi bi-funnel-fill"></i> Filter Lanjutan
+          </button>
+        </div>
+      </div>
+
+      <div class="collapse mt-3" id="collapseFilterDeploy">
+        <div class="row g-2 align-items-end bg-light p-3 rounded-3 border">
+          <div class="col-lg-3 col-md-6">
+            <label class="form-label text-muted fw-bold small mb-1"><i class="bi bi-calendar-month"></i> Periode Laporan (Bulan)</label>
+            <input type="month" class="form-control border-white shadow-sm" id="filter-deploy-bulan" onchange="applyFilterDeploy()">
+          </div>
+          
+          <div class="col-lg-3 col-md-6">
+            <label class="form-label text-muted fw-bold small mb-1"><i class="bi bi-arrow-left-right"></i> Jenis Mutasi</label>
+            <select class="form-select border-white shadow-sm" id="filter-deploy-jenis" onchange="applyFilterDeploy()">
+              <option value="">Semua Jenis Mutasi</option>
+              <option value="ONBOARD">Onboard (Naik Kapal)</option>
+              <option value="SIGN OFF">Sign Off (Turun Kapal)</option>
+            </select>
+          </div>
+
+          <div class="col-lg-4 col-md-6">
+            <label class="form-label text-muted fw-bold small mb-1"><i class="bi bi-sort-down"></i> Urutkan Berdasarkan</label>
+            <select class="form-select border-white shadow-sm" id="filter-deploy-sort" onchange="applyFilterDeploy()">
+              <option value="on-desc">Sign On (Terbaru - Terlama)</option>
+              <option value="on-asc">Sign On (Terlama - Terbaru)</option>
+              <option value="off-desc">Sign Off (Terbaru - Terlama)</option>
+              <option value="off-asc">Sign Off (Terlama - Terbaru)</option>
+            </select>
+          </div>
+
+          <div class="col-lg-2 col-md-12 text-md-end mt-2 mt-md-0">
+            <button class="btn btn-outline-secondary w-100 h-100 fw-bold shadow-sm" onclick="resetFilterDeploy()">
+              <i class="bi bi-arrow-clockwise"></i> Reset
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-0 table-responsive">
+      <table class="table table-hover table-borderless align-middle mb-0">
+        <thead class="bg-light text-muted small border-bottom">
+          <tr>
+            <th class="ps-4">NAMA CREW</th>
+            <th>RANK</th>
+            <th>KAPAL & PERUSAHAAN</th>
+            <th>SIGN ON</th>
+            <th>SIGN OFF</th>
+            <th>BLN LAPOR</th>
+            <th class="text-center pe-4">STATUS</th>
+          </tr>
+        </thead>
+        <tbody id="table-body-deploy">
+          </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalBulkOnboard" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content border-0 shadow">
+        <div class="modal-header bg-primary text-white">
+          <h5 class="modal-title fw-bold"><i class="bi bi-people-fill"></i> Deploy Massal (Grup Onboard)</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        
+        <div class="modal-body p-0">
+          <div id="bulk-step-1" class="p-4">
+            <div class="alert alert-primary bg-opacity-10 border-primary text-primary mb-3">
+              <i class="bi bi-info-circle-fill"></i> Hanya kru yang <strong>tidak sedang Onboard</strong> yang akan muncul di daftar ini.
+            </div>
+            
+            <input type="text" class="form-control mb-3 shadow-sm border-primary" id="search-bulk-crew" placeholder="Cari nama atau jabatan kru..." onkeyup="filterBulkList()">
+            
+            <div class="border rounded shadow-sm" style="max-height: 300px; overflow-y: auto;">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light sticky-top">
+                  <tr>
+                    <th class="ps-3" style="width: 50px;">
+                      <input class="form-check-input" type="checkbox" id="check-all-bulk" onchange="toggleAllBulkCrews()">
+                    </th>
+                    <th>KODE</th>
+                    <th>NAMA LENGKAP</th>
+                    <th>JABATAN</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-bulk-crew">
+                  </tbody>
+              </table>
+            </div>
+            
+            <div class="d-flex justify-content-between align-items-center mt-3">
+              <span class="text-muted fw-bold">Terpilih: <span id="bulk-count" class="text-primary fs-5">0</span> Kru</span>
+              <button class="btn btn-primary fw-bold px-4" onclick="lanjutBulkStep2()">Lanjut Isi Data Kapal <i class="bi bi-arrow-right"></i></button>
+            </div>
+          </div>
+
+          <div id="bulk-step-2" class="p-4" style="display: none;">
+            <form id="form-bulk-onboard">
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label fw-bold">Tanggal Sign On</label>
+                  <input type="date" class="form-control border-success" id="bulk_tgl_onboard" required>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label fw-bold text-primary">Bulan Laporan</label>
+                  <input type="month" class="form-control border-primary bg-primary bg-opacity-10" id="bulk_bulan_lapor" required>
+                </div>
+                <div class="col-md-6">
+                  <label class="fw-bold small mb-1">Nama Kapal <span class="text-danger">*</span></label>
+                  <select class="form-select border-primary" id="bulk_kapal" onchange="cekTambahKapal(this.value)" required>
+                      <option value="">-- Pilih Kapal --</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="fw-bold small mb-1">Perusahaan <span class="text-danger">*</span></label>
+                  <select class="form-select border-primary" id="bulk_perusahaan" onchange="cekTambahKapal(this.value)" required>
+                      <option value="">-- Pilih Perusahaan --</option>
+                  </select>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label fw-bold small">Bendera</label>
+                  <input type="text" class="form-control" id="bulk_bendera">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label fw-bold small">GRT</label>
+                  <input type="text" class="form-control" id="bulk_grt">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label fw-bold small text-primary">Jenis Kapal</label>
+                  <input type="text" class="form-control border-primary" id="bulk_jenis_kapal" placeholder="Tugboat, Bulk Carrier...">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label fw-bold small">Negara Tujuan</label>
+                  <input type="text" class="form-control" id="bulk_negara">
+                </div>
+              </div>
+              
+              <div class="alert alert-warning mt-4 mb-0 border-warning">
+                <i class="bi bi-exclamation-triangle-fill"></i> Data ini akan diterapkan ke <strong><span id="bulk-confirm-count">0</span> kru</strong> yang dipilih. Jabatan (Rank) akan ditarik otomatis sesuai profil masing-masing.
+              </div>
+
+              <div class="d-flex justify-content-between mt-4">
+                <button type="button" class="btn btn-secondary fw-bold" onclick="kembaliBulkStep1()"><i class="bi bi-arrow-left"></i> Kembali</button>
+                <button type="submit" class="btn btn-success fw-bold px-4" id="btn-submit-bulk"><i class="bi bi-rocket-takeoff-fill"></i> Berangkatkan Massal</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalBulkSignOff" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content border-0 shadow">
+        <div class="modal-header bg-warning">
+          <h5 class="modal-title fw-bold text-dark"><i class="bi bi-airplane-engines-fill"></i> Sign Off Massal</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        
+        <div class="modal-body p-0">
+          <div id="bulk-off-step-1" class="p-4">
+            <div class="alert alert-warning bg-opacity-10 border-warning text-dark mb-3">
+              <i class="bi bi-info-circle-fill"></i> Hanya kru berstatus <strong>Onboard</strong> yang akan muncul di daftar ini.
+            </div>
+            
+            <input type="text" class="form-control mb-3 shadow-sm border-warning" id="search-bulk-off-crew" placeholder="Cari nama, kode, atau kapal..." onkeyup="filterBulkOffList()">
+            
+            <div class="border rounded shadow-sm" style="max-height: 300px; overflow-y: auto;">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light sticky-top">
+                  <tr>
+                    <th class="ps-3" style="width: 50px;">
+                      <input class="form-check-input" type="checkbox" id="check-all-bulk-off" onchange="toggleAllBulkOffCrews()">
+                    </th>
+                    <th>KODE</th>
+                    <th>NAMA LENGKAP</th>
+                    <th>KAPAL SAAT INI</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-bulk-off-crew">
+                  </tbody>
+              </table>
+            </div>
+            
+            <div class="d-flex justify-content-between align-items-center mt-3">
+              <span class="text-muted fw-bold">Terpilih: <span id="bulk-off-count" class="text-warning fs-5 text-dark">0</span> Kru</span>
+              <button class="btn btn-warning fw-bold px-4 text-dark" onclick="lanjutBulkOffStep2()">Lanjut Isi Data <i class="bi bi-arrow-right"></i></button>
+            </div>
+          </div>
+
+          <div id="bulk-off-step-2" class="p-4" style="display: none;">
+            <form id="form-bulk-signoff">
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label fw-bold">Tanggal Turun (Sign Off)</label>
+                  <input type="date" class="form-control border-warning" id="bulk_off_tgl" required>
+                  <div class="form-text small">Isi tanggal masa depan untuk fitur penjadwalan.</div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label fw-bold text-primary">Bulan Laporan</label>
+                  <input type="month" class="form-control border-primary bg-primary bg-opacity-10" id="bulk_off_bulan" required>
+                </div>
+              </div>
+              
+              <div class="alert alert-secondary mt-4 mb-0">
+                <i class="bi bi-exclamation-triangle-fill"></i> Data ini akan diterapkan ke <strong><span id="bulk-off-confirm-count">0</span> kru</strong>. Sistem akan otomatis menutup kontrak kapal mereka masing-masing.
+              </div>
+
+              <div class="d-flex justify-content-between mt-4">
+                <button type="button" class="btn btn-secondary fw-bold" onclick="kembaliBulkOffStep1()"><i class="bi bi-arrow-left"></i> Kembali</button>
+                <button type="submit" class="btn btn-warning fw-bold text-dark px-4" id="btn-submit-bulk-off"><i class="bi bi-airplane-engines-fill"></i> Proses Sign Off Massal</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalBulkPlotting" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content border-0 shadow">
+        <div class="modal-header bg-info text-white">
+          <h5 class="modal-title fw-bold"><i class="bi bi-pin-angle-fill"></i> Plotting Massal</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        
+        <div class="modal-body p-0">
+          <div id="bulk-plot-step-1" class="p-4">
+            <div class="alert alert-info bg-opacity-10 border-info text-info mb-3">
+              <i class="bi bi-info-circle-fill"></i> Menampilkan kru yang <strong>tidak Onboard</strong>.
+            </div>
+            
+            <input type="text" class="form-control mb-3 shadow-sm border-info" id="search-bulk-plot" placeholder="Cari nama atau kode kru..." onkeyup="filterBulkPlotList()">
+            
+            <div class="border rounded shadow-sm" style="max-height: 300px; overflow-y: auto;">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light sticky-top">
+                  <tr>
+                    <th class="ps-3" style="width: 50px;">
+                      <input class="form-check-input" type="checkbox" id="check-all-bulk-plot" onchange="toggleAllBulkPlot()">
+                    </th>
+                    <th>KODE</th>
+                    <th>NAMA LENGKAP</th>
+                    <th>STATUS SAAT INI</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-bulk-plot"></tbody>
+              </table>
+            </div>
+            
+            <div class="d-flex justify-content-between align-items-center mt-3">
+              <span class="text-muted fw-bold">Terpilih: <span id="bulk-plot-count" class="text-info fs-5">0</span> Kru</span>
+              <button class="btn btn-info text-white fw-bold px-4" onclick="lanjutBulkPlotStep2()">Lanjut <i class="bi bi-arrow-right"></i></button>
+            </div>
+          </div>
+
+          <div id="bulk-plot-step-2" class="p-4" style="display: none;">
+            <form id="form-bulk-plot">
+              <div class="row g-3">
+                <div class="col-md-12">
+                  <label class="form-label fw-bold">Rencana Kapal (Opsional)</label>
+                  <select class="form-select border-primary fw-bold" id="bulk_plot_kapal" onchange="cekTambahKapal(this.value)" required>
+                      <option value="">-- Pilih Kapal --</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div class="alert alert-warning mt-4 mb-0">
+                <i class="bi bi-exclamation-triangle-fill"></i> Ini hanya akan mengubah status <strong><span id="bulk-plot-confirm-count">0</span> kru</strong> menjadi PLOTTING di database utama tanpa masuk ke log mutasi.
+              </div>
+
+              <div class="d-flex justify-content-between mt-4">
+                <button type="button" class="btn btn-secondary fw-bold" onclick="kembaliBulkPlotStep1()"><i class="bi bi-arrow-left"></i> Kembali</button>
+                <button type="submit" class="btn btn-info text-white fw-bold px-4" id="btn-submit-bulk-plot"><i class="bi bi-check-circle-fill"></i> Simpan Plotting</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

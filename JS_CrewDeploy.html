@@ -1,0 +1,682 @@
+<script>
+  let globalDeployData = [];
+
+  function loadDataDeploy() {
+    const tbody = document.getElementById('table-body-deploy');
+    if(!tbody) return;
+    
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Memuat log mutasi...</td></tr>';
+    
+    google.script.run
+      .withSuccessHandler(function(data) {
+        globalDeployData = data;
+        
+        if(!document.getElementById('filter-deploy-bulan').value) {
+           let today = new Date();
+           let yyyyMm = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, '0');
+           document.getElementById('filter-deploy-bulan').value = yyyyMm;
+        }
+        
+        applyFilterDeploy(); 
+      })
+      .withFailureHandler(function(err) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">Gagal memuat data: ' + err.message + '</td></tr>';
+      })
+      .getCrewDeployData();
+  }
+
+  function applyFilterDeploy() {
+    const keyword = document.getElementById('filter-deploy-search').value.toLowerCase();
+    const bulan = document.getElementById('filter-deploy-bulan').value;
+    const jenis = document.getElementById('filter-deploy-jenis').value;
+    
+    // Ambil nilai dropdown sorting baru
+    const sortOrder = document.getElementById('filter-deploy-sort') ? document.getElementById('filter-deploy-sort').value : 'on-desc';
+
+    let totalOnboard = 0;
+    let totalSignOff = 0;
+
+    let filtered = globalDeployData.filter(row => {
+      if(!row[0]) return false;
+
+      // STRUKTUR BARU DEPLOY: [1]Kode, [2]Nama, [3]Kapal, [6]Rank, [8]Perusahaan, [9]SignOn, [10]SignOff, [12]BlnLapor
+      const kode = (row[1] || '').toLowerCase();
+      const nama = (row[2] || '').toLowerCase();
+      const kapal = (row[3] || '').toLowerCase();
+      const rank = (row[6] || '').toLowerCase();
+      const perush = (row[8] || '').toLowerCase();
+      const tglOff = row[10] || '';
+      const blnLapor = row[12] || '';
+
+      let matchSearch = true;
+      if (keyword) { matchSearch = kode.includes(keyword) || nama.includes(keyword) || kapal.includes(keyword) || rank.includes(keyword) || perush.includes(keyword); }
+
+      let matchBulan = true;
+      if (bulan) { matchBulan = (blnLapor === bulan); }
+
+      let matchJenis = true;
+      let statusAktivitas = tglOff === "" ? "ONBOARD" : "SIGNOFF";
+      if (jenis) { matchJenis = (statusAktivitas === jenis); }
+
+      let isMatch = matchSearch && matchBulan && matchJenis;
+
+      if (isMatch) {
+          if (statusAktivitas === "ONBOARD") totalOnboard++;
+          else totalSignOff++;
+      }
+
+      return isMatch;
+    });
+
+    document.getElementById('count-onboard').innerText = totalOnboard;
+    document.getElementById('count-signoff').innerText = totalSignOff;
+
+    // ==========================================
+    // LOGIKA SORTING TANGGAL
+    // ==========================================
+    filtered.sort((a, b) => {
+      let valA, valB;
+      
+      // Jika pilihannya mengandung kata 'on', cek kolom index 9 (Sign On)
+      // Jika pilihannya 'off', cek kolom index 10 (Sign Off)
+      if (sortOrder.includes('on')) {
+        valA = a[9] ? new Date(a[9]).getTime() : 0;
+        valB = b[9] ? new Date(b[9]).getTime() : 0;
+      } else {
+        valA = a[10] ? new Date(a[10]).getTime() : 0;
+        valB = b[10] ? new Date(b[10]).getTime() : 0;
+      }
+
+      // Desc = Terbaru ke Terlama. Asc = Terlama ke Terbaru
+      if (sortOrder.includes('desc')) {
+        return valB - valA; 
+      } else {
+        return valA - valB; 
+      }
+    });
+
+    window.currentFilteredDeployData = filtered;
+    renderTableDeploy(filtered);
+  }
+
+  function renderTableDeploy(data) {
+    const tbody = document.getElementById('table-body-deploy');
+    let htmlString = '';
+
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-5"><i class="bi bi-inboxes fs-3 d-block mb-2"></i>Tidak ada data mutasi pada periode ini.</td></tr>';
+      return;
+    }
+
+    data.forEach(row => {
+      // Struktur Baru: Kode di 1, Nama di 2, Kapal di 3, Rank di 6, Perusahaan di 8, On 9, Off 10, Bln 12
+      let tglOn = row[9] ? row[9].toString().substring(0,10) : '-';
+      let tglOff = row[10] ? row[10].toString().substring(0,10) : '-';
+      let statusBadge = row[10] === "" 
+          ? `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-1"><i class="bi bi-arrow-right-circle"></i> MUTASI NAIK</span>` 
+          : `<span class="badge bg-warning bg-opacity-10 text-dark border border-warning border-opacity-25 px-3 py-1"><i class="bi bi-arrow-left-circle"></i> MUTASI TURUN</span>`;
+
+      htmlString += `
+        <tr class="align-middle">
+          <td class="ps-4 fw-bold text-dark">${row[2]}</td> <td><span class="text-primary fw-medium">${row[6] || '-'}</span></td>
+          <td>
+            <div class="fw-bold text-dark">${row[3] || '-'}</div>
+            <div class="small text-muted">${row[8] || '-'}</div>
+          </td>
+          <td><i class="bi bi-arrow-up-right-circle text-success me-1"></i> ${tglOn}</td>
+          <td>${tglOff !== '-' ? `<i class="bi bi-arrow-down-left-circle text-warning me-1"></i> ${tglOff}` : '-'}</td>
+          <td class="fw-medium">${row[12] || '-'}</td>
+          <td class="text-center pe-4">${statusBadge}</td>
+        </tr>
+      `;
+    });
+    tbody.innerHTML = htmlString;
+  }
+
+  function resetFilterDeploy() {
+    document.getElementById('filter-deploy-search').value = "";
+    document.getElementById('filter-deploy-jenis').value = "";
+    
+    // Kembalikan urutan ke default (Sign On Terbaru)
+    if(document.getElementById('filter-deploy-sort')) {
+      document.getElementById('filter-deploy-sort').value = "on-desc";
+    }
+
+    let today = new Date();
+    let yyyyMm = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, '0');
+    document.getElementById('filter-deploy-bulan').value = yyyyMm;
+    applyFilterDeploy();
+  }
+
+    // ==========================================
+    // JS: DROPDOWN KAPAL OTOMATIS & TELEPORT (CREW DEPLOY)
+    // ==========================================
+
+    window.muatDropdownKapalMutasi = function(idElemenSelect) {
+        const sel = document.getElementById(idElemenSelect);
+        if(!sel) return;
+        
+        sel.innerHTML = '<option value="">Sedang menarik data dari Buku Induk...</option>';
+        
+        google.script.run.withSuccessHandler(list => {
+            let opt = '<option value="">-- Pilih Kapal --</option>';
+            list.forEach(k => {
+                // Backend mengirim: "MV. OCEAN STAR - Shanghai Crewing"
+                // Kita ambil "MV. OCEAN STAR"-nya saja untuk disave ke log pelaut
+                let namaKapalAja = k.split(' - ')[0].trim(); 
+                opt += `<option value="${namaKapalAja}">${k}</option>`;
+            });
+            
+            // TOMBOL TELEPORT DI PALING BAWAH
+            opt += '<option value="TAMBAH_BARU" class="bg-primary text-white fw-bold">➕ + Kapal / Principal Belum Terdaftar? Tambah Disini...</option>';
+            sel.innerHTML = opt;
+        }).getDropdownKapalAktif();
+    }
+
+    // Fungsi memuat Dropdown Perusahaan / Principal
+    window.muatDropdownPrincipalMutasi = function(idElemenSelect) {
+        const sel = document.getElementById(idElemenSelect);
+        if(!sel) return;
+        
+        sel.innerHTML = '<option value="">Sedang menarik data Principal...</option>';
+        
+        // Memanggil fungsi getDropdownPrincipalAktif yang sudah kita buat di backend
+        google.script.run.withSuccessHandler(list => {
+            let opt = '<option value="">-- Pilih Perusahaan / Principal --</option>';
+            list.forEach(p => {
+                opt += `<option value="${p}">${p}</option>`;
+            });
+            
+            // TOMBOL TELEPORT DI PALING BAWAH
+            opt += '<option value="TAMBAH_BARU" class="bg-primary text-white fw-bold">➕ + Principal Belum Terdaftar? Tambah Disini...</option>';
+            sel.innerHTML = opt;
+        }).getDropdownPrincipalAktif();
+    }
+
+    window.cekTambahKapal = function(val) {
+        if (val === "TAMBAH_BARU") {
+            // 1. Tutup paksa modal Mutasi / SweetAlert yang sedang terbuka
+            if (Swal.isVisible()) {
+                Swal.close();
+            } else {
+                document.querySelectorAll('.modal.show').forEach(modal => {
+                    let modalInstance = bootstrap.Modal.getInstance(modal);
+                    if(modalInstance) modalInstance.hide();
+                });
+            }
+
+            // 2. TELEPORT: Pindah layar ke menu Kapal & Principal
+            if (typeof loadPage === "function") {
+                loadPage('Ships'); 
+                loadDataPrincipal();
+            }
+            
+            // 3. Berikan instruksi ke Admin
+            Swal.fire({
+                title: '<i class="bi bi-shield-lock-fill text-warning"></i> Akses Terkunci',
+                html: 'Untuk mencegah data ganda, pendaftaran armada baru harus melalui <b>Buku Induk</b>.<br><br><b>Langkah:</b><br>1. Daftarkan Principalnya (Jika belum ada).<br>2. Pindah ke Tab <b>Data Kapal</b> lalu tambah kapalnya.',
+                confirmButtonText: 'OK, Mengerti!',
+                confirmButtonColor: '#0d6efd'
+            });
+            
+            // Kosongkan kembali pilihan select-nya
+            event.target.value = "";
+        }
+    }
+
+  // ==========================================
+  // JS DEPLOY MASSAL (BULK ONBOARD)
+  // ==========================================
+  let standbyCrewsList = [];
+
+  function bukaModalBulkDeploy() {
+    standbyCrewsList = globalCrewData.filter(row => row[12] !== 'Onboard');
+    
+    document.getElementById('search-bulk-crew').value = "";
+    document.getElementById('check-all-bulk').checked = false;
+    document.getElementById('bulk-count').innerText = "0";
+    kembaliBulkStep1(); 
+    
+    // --> SUNTIKAN PEMANTIK DROPDOWN ONBOARD <--
+    muatDropdownKapalMutasi('bulk_kapal');
+    muatDropdownPrincipalMutasi('bulk_perusahaan');
+    
+    renderBulkCrewList(standbyCrewsList);
+    new bootstrap.Modal(document.getElementById('modalBulkOnboard')).show();
+  }
+
+  function renderBulkCrewList(data) {
+    let tbody = document.getElementById('tbody-bulk-crew');
+    let html = '';
+    
+    if(data.length === 0) {
+       tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Tidak ada kru Standby.</td></tr>';
+       return;
+    }
+
+    data.forEach(row => {
+      let kode = row[0];
+      let nama = row[1] || '-';
+      let rank = row[2] || ''; 
+      
+      html += `
+        <tr>
+          <td class="ps-3"><input class="form-check-input bulk-checkbox" type="checkbox" value="${kode}" onchange="updateBulkCount()"></td>
+          <td class="fw-bold text-secondary">${kode}</td>
+          <td class="fw-medium">${nama}</td>
+          <td>
+            <input type="text" class="form-control form-control-sm border-primary text-primary fw-bold" id="bulk-rank-${kode}" value="${rank}">
+          </td>
+        </tr>
+      `;
+    });
+    tbody.innerHTML = html;
+  }
+
+  function filterBulkList() {
+    let keyword = document.getElementById('search-bulk-crew').value.toLowerCase();
+    let filtered = standbyCrewsList.filter(row => {
+      return (row[0].toLowerCase().includes(keyword) || 
+              (row[1] || '').toLowerCase().includes(keyword) || 
+              (row[2] || '').toLowerCase().includes(keyword));
+    });
+    renderBulkCrewList(filtered);
+    document.getElementById('check-all-bulk').checked = false;
+  }
+
+  function toggleAllBulkCrews() {
+    let isChecked = document.getElementById('check-all-bulk').checked;
+    document.querySelectorAll('.bulk-checkbox').forEach(cb => cb.checked = isChecked);
+    updateBulkCount();
+  }
+
+  function updateBulkCount() {
+    let selected = document.querySelectorAll('.bulk-checkbox:checked').length;
+    document.getElementById('bulk-count').innerText = selected;
+    document.getElementById('bulk-confirm-count').innerText = selected;
+  }
+
+  function lanjutBulkStep2() {
+    if(document.querySelectorAll('.bulk-checkbox:checked').length === 0) {
+      alert("Pilih minimal 1 kru terlebih dahulu!");
+      return;
+    }
+    let today = new Date();
+    document.getElementById('bulk_tgl_onboard').value = today.toISOString().split('T')[0];
+    document.getElementById('bulk_bulan_lapor').value = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, '0');
+    
+    document.getElementById('bulk-step-1').style.display = 'none';
+    document.getElementById('bulk-step-2').style.display = 'block';
+  }
+
+  function kembaliBulkStep1() {
+    document.getElementById('bulk-step-2').style.display = 'none';
+    document.getElementById('bulk-step-1').style.display = 'block';
+  }
+
+  const formBulk = document.getElementById('form-bulk-onboard');
+  if(formBulk) {
+    formBulk.addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      let kruTerpilih = [];
+      document.querySelectorAll('.bulk-checkbox:checked').forEach(cb => {
+        kruTerpilih.push({
+            kode: cb.value,
+            rank: document.getElementById('bulk-rank-' + cb.value).value
+        });
+      });
+
+      const btn = document.getElementById('btn-submit-bulk');
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Memproses...';
+      btn.disabled = true;
+
+      const dataKapal = {
+        tgl_onboard: document.getElementById('bulk_tgl_onboard').value,
+        bulan_laporan: document.getElementById('bulk_bulan_lapor').value,
+        kapal: document.getElementById('bulk_kapal').value,
+        perusahaan: document.getElementById('bulk_perusahaan').value,
+        bendera: document.getElementById('bulk_bendera').value,
+        grt: document.getElementById('bulk_grt').value,
+        jenis_kapal: document.getElementById('bulk_jenis_kapal').value,
+        negara_tujuan: document.getElementById('bulk_negara').value
+      };
+
+      google.script.run
+        .withSuccessHandler(function(pesan) {
+          alert(pesan);
+          bootstrap.Modal.getInstance(document.getElementById('modalBulkOnboard')).hide();
+          btn.innerHTML = '<i class="bi bi-rocket-takeoff-fill"></i> Berangkatkan Massal';
+          btn.disabled = false;
+          formBulk.reset();
+          loadDataCrew(); 
+          loadDataDeploy(); // Segarkan tabel mutasi
+        })
+        .withFailureHandler(function(err){ 
+          alert("Error: " + err.message); btn.disabled = false; btn.innerHTML = 'Gagal';
+        })
+        .prosesMutasiOnboardMassal(kruTerpilih, dataKapal);
+    });
+  }
+
+  // ==========================================
+  // JS SIGN OFF MASSAL (CERDAS - Murni dari Deploy)
+  // ==========================================
+  let onboardCrewsList = []; 
+
+  function bukaModalBulkSignOff() {
+    onboardCrewsList = globalCrewData.filter(row => row[12] === 'Onboard');
+    
+    document.getElementById('search-bulk-off-crew').value = "";
+    document.getElementById('check-all-bulk-off').checked = false;
+    document.getElementById('bulk-off-count').innerText = "0";
+    kembaliBulkOffStep1(); 
+    
+    // OPTIMASI: Langsung gunakan globalDeployData yang sudah di-load di memori browser!
+    onboardCrewsList.forEach(kru => {
+        let kode = kru[0];
+        let kapalAktif = "Tidak diketahui";
+        
+        for(let i = globalDeployData.length - 1; i >= 0; i--) {
+           if(String(globalDeployData[i][1]).trim() === String(kode).trim() && globalDeployData[i][10] === "") {
+              kapalAktif = globalDeployData[i][3]; 
+              break;
+           }
+        }
+        kru.kapalSekarang = kapalAktif; 
+    });
+    
+    renderBulkOffCrewList(onboardCrewsList);
+    new bootstrap.Modal(document.getElementById('modalBulkSignOff')).show();
+  }
+
+  function renderBulkOffCrewList(data) {
+    let tbody = document.getElementById('tbody-bulk-off-crew');
+    let html = '';
+    
+    if(data.length === 0) {
+       tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Tidak ada kru Onboard.</td></tr>';
+       return;
+    }
+
+    data.forEach(row => {
+      let kode = row[0];
+      let nama = row[1] || '-';
+      let kapal = row.kapalSekarang || 'Tidak diketahui'; 
+      
+      html += `
+        <tr>
+          <td class="ps-3"><input class="form-check-input bulk-off-checkbox" type="checkbox" value="${kode}" onchange="updateBulkOffCount()"></td>
+          <td class="fw-bold text-secondary">${kode}</td>
+          <td class="fw-medium">${nama}</td>
+          <td><span class="badge bg-primary bg-opacity-10 text-primary border">${kapal}</span></td>
+          <td><input type="text" class="form-control form-control-sm border-warning" id="bulk-ket-${kode}" value="End of Contract"></td>
+        </tr>
+      `;
+    });
+    tbody.innerHTML = html;
+  }
+
+  function filterBulkOffList() {
+    let keyword = document.getElementById('search-bulk-off-crew').value.toLowerCase();
+    let filtered = onboardCrewsList.filter(row => {
+      return (row[0].toLowerCase().includes(keyword) || 
+              (row[1] || '').toLowerCase().includes(keyword) || 
+              (row.kapalSekarang || '').toLowerCase().includes(keyword));
+    });
+    renderBulkOffCrewList(filtered);
+    document.getElementById('check-all-bulk-off').checked = false;
+  }
+
+  function toggleAllBulkOffCrews() {
+    let isChecked = document.getElementById('check-all-bulk-off').checked;
+    document.querySelectorAll('.bulk-off-checkbox').forEach(cb => cb.checked = isChecked);
+    updateBulkOffCount();
+  }
+
+  function updateBulkOffCount() {
+    let selected = document.querySelectorAll('.bulk-off-checkbox:checked').length;
+    document.getElementById('bulk-off-count').innerText = selected;
+    document.getElementById('bulk-off-confirm-count').innerText = selected;
+  }
+
+  function lanjutBulkOffStep2() {
+    if(document.querySelectorAll('.bulk-off-checkbox:checked').length === 0) {
+      alert("Pilih minimal 1 kru terlebih dahulu!"); return; 
+    }
+    
+    let today = new Date();
+    document.getElementById('bulk_off_tgl').value = today.toISOString().split('T')[0];
+    document.getElementById('bulk_off_bulan').value = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, '0');
+    
+    document.getElementById('bulk-off-step-1').style.display = 'none';
+    document.getElementById('bulk-off-step-2').style.display = 'block';
+  }
+
+  function kembaliBulkOffStep1() {
+    document.getElementById('bulk-off-step-2').style.display = 'none';
+    document.getElementById('bulk-off-step-1').style.display = 'block';
+  }
+
+  const formBulkOff = document.getElementById('form-bulk-signoff');
+  if(formBulkOff) {
+    formBulkOff.addEventListener('submit', function(e) {
+      e.preventDefault();
+      
+      let kruTerpilih = [];
+      document.querySelectorAll('.bulk-off-checkbox:checked').forEach(cb => {
+        kruTerpilih.push({
+          kode: cb.value,
+          keterangan: document.getElementById('bulk-ket-' + cb.value).value
+        });
+      });
+
+      const btn = document.getElementById('btn-submit-bulk-off');
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Memproses...';
+      btn.disabled = true;
+
+      const dataSignOff = {
+        tgl_signoff: document.getElementById('bulk_off_tgl').value,
+        bulan_laporan: document.getElementById('bulk_off_bulan').value
+      };
+
+      google.script.run
+        .withSuccessHandler(function(pesan) {
+          alert(pesan);
+          bootstrap.Modal.getInstance(document.getElementById('modalBulkSignOff')).hide();
+          btn.innerHTML = '<i class="bi bi-airplane-engines-fill"></i> Proses Sign Off Massal';
+          btn.disabled = false;
+          formBulkOff.reset();
+          loadDataCrew(); 
+          loadDataDeploy(); // Segarkan tabel mutasi
+        })
+        .withFailureHandler(function(err){ 
+          alert("Error: " + err.message); btn.disabled = false; btn.innerHTML = 'Gagal';
+        })
+        .prosesMutasiSignOffMassal(kruTerpilih, dataSignOff);
+    });
+  }
+
+  // ==========================================
+  // JS CETAK LAPORAN PDF (VERSI BERSIH & CEPAT)
+  // ==========================================
+  function cetakLaporanPDF() {
+    // 1. Ambil data langsung dari variabel asli agar kolom tidak tertukar
+    if (!window.currentFilteredDeployData || window.currentFilteredDeployData.length === 0) {
+      alert("Tidak ada data yang bisa dicetak."); return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF('l', 'mm', 'a4'); // Landscape
+
+    let yMulai = 0;
+    try { yMulai = cetakKopSuratGlobal(doc, 'landscape'); } catch (e) { yMulai = 20; }
+
+    const bulanFilter = document.getElementById('filter-deploy-bulan').value;
+    const jenisFilter = document.getElementById('filter-deploy-jenis').options[document.getElementById('filter-deploy-jenis').selectedIndex].text;
+
+    let teksBulan = bulanFilter ? 
+        ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"][parseInt(bulanFilter.split("-")[1]) - 1] + " " + bulanFilter.split("-")[0] 
+        : "Semua Bulan";
+
+    doc.setFontSize(14); doc.setFont("helvetica", "bold");
+    doc.text(`LAPORAN MUTASI KRU`, 148.5, yMulai + 10, { align: "center" });
+
+    doc.setFontSize(9); doc.setFont("helvetica", "normal");
+    doc.text(`Periode: ${teksBulan} | Jenis: ${jenisFilter}`, 14, yMulai + 18);
+
+    let today = new Date();
+    let tglCetak = today.getDate() + "/" + (today.getMonth()+1) + "/" + today.getFullYear();
+    doc.text("Tanggal Cetak: " + tglCetak, 283, yMulai + 18, { align: "right" });
+
+    const tableHeaders = [["NO", "NAMA KRU", "RANK", "NAMA KAPAL", "PERUSAHAAN", "SIGN ON", "SIGN OFF", "STATUS"]];
+    const tableData = [];
+
+    window.currentFilteredDeployData.forEach((row, index) => {
+      let tglOn = row[9] ? row[9].toString().substring(0,10) : '-';
+      let tglOff = row[10] ? row[10].toString().substring(0,10) : '-';
+      let statusMutasi = row[10] === "" ? "ONBOARD" : "SIGN OFF";
+
+      tableData.push([
+        index + 1,
+        row[2] || '-', // Nama Kru
+        row[6] || '-', // Rank
+        row[3] || '-', // Kapal
+        row[8] || '-', // Perusahaan
+        tglOn,
+        tglOff,
+        statusMutasi
+      ]);
+    });
+
+    doc.autoTable({
+      head: tableHeaders,
+      body: tableData,
+      startY: yMulai + 22,
+      margin: { left: 14, right: 14 },
+      theme: 'grid',
+      styles: { 
+        font: 'helvetica', fontSize: 8, cellPadding: 4, valign: 'middle',
+        lineColor: [226, 232, 240], lineWidth: 0.1 
+      },
+      headStyles: { 
+        fillColor: [67, 97, 238], textColor: 255, fontStyle: 'bold', halign: 'center' 
+      },
+      // AUTO FIT MAGIC: Kita buang pengaturan 'cellWidth' kaku.
+      // Cukup atur rata tengah pada kolom tertentu saja.
+      columnStyles: {
+        0: { halign: 'center' }, // No
+        5: { halign: 'center' }, // Sign On
+        6: { halign: 'center' }, // Sign Off
+        7: { halign: 'center', fontStyle: 'bold' } // Status
+      }
+    });
+
+    doc.save(`Laporan_Mutasi_${teksBulan.replace(/\s/g, "_")}.pdf`);
+  }
+
+  let availableForPlotting = [];
+
+function bukaModalBulkPlotting() {
+  // Hanya tarik kru yang BUKAN Onboard
+  availableForPlotting = globalCrewData.filter(row => row[12] !== 'Onboard');
+  
+  document.getElementById('search-bulk-plot').value = "";
+  document.getElementById('check-all-bulk-plot').checked = false;
+  document.getElementById('bulk-plot-count').innerText = "0";
+  kembaliBulkPlotStep1(); 
+  
+  // --> SUNTIKAN PEMANTIK DROPDOWN PLOTTING <--
+  muatDropdownKapalMutasi('bulk_plot_kapal');
+  
+  renderBulkPlotList(availableForPlotting);
+  new bootstrap.Modal(document.getElementById('modalBulkPlotting')).show();
+}
+
+function renderBulkPlotList(data) {
+  let tbody = document.getElementById('tbody-bulk-plot');
+  let html = '';
+  if(data.length === 0) {
+     tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Tidak ada kru yang tersedia.</td></tr>';
+     return;
+  }
+  data.forEach(row => {
+    // Beri highlight jika statusnya sudah plotting
+    let badgeStatus = row[12] === 'Plotting' ? `<span class="badge bg-info">${row[12]}</span>` : `<span class="badge bg-secondary">${row[12]}</span>`;
+    
+    html += `
+      <tr>
+        <td class="ps-3"><input class="form-check-input bulk-plot-checkbox" type="checkbox" value="${row[0]}" onchange="updateBulkPlotCount()"></td>
+        <td class="fw-bold text-secondary">${row[0]}</td>
+        <td class="fw-medium">${row[1] || '-'}</td>
+        <td>${badgeStatus}</td>
+      </tr>
+    `;
+  });
+  tbody.innerHTML = html;
+}
+
+function filterBulkPlotList() {
+  let keyword = document.getElementById('search-bulk-plot').value.toLowerCase();
+  let filtered = availableForPlotting.filter(row => {
+    return (row[0].toLowerCase().includes(keyword) || (row[1] || '').toLowerCase().includes(keyword));
+  });
+  renderBulkPlotList(filtered);
+}
+
+function toggleAllBulkPlot() {
+  let isChecked = document.getElementById('check-all-bulk-plot').checked;
+  document.querySelectorAll('.bulk-plot-checkbox').forEach(cb => cb.checked = isChecked);
+  updateBulkPlotCount();
+}
+
+function updateBulkPlotCount() {
+  let selected = document.querySelectorAll('.bulk-plot-checkbox:checked').length;
+  document.getElementById('bulk-plot-count').innerText = selected;
+  document.getElementById('bulk-plot-confirm-count').innerText = selected;
+}
+
+function lanjutBulkPlotStep2() {
+  if(document.querySelectorAll('.bulk-plot-checkbox:checked').length === 0) {
+    alert("Pilih minimal 1 kru terlebih dahulu!"); return;
+  }
+  document.getElementById('bulk-plot-step-1').style.display = 'none';
+  document.getElementById('bulk-plot-step-2').style.display = 'block';
+}
+
+function kembaliBulkPlotStep1() {
+  document.getElementById('bulk-plot-step-2').style.display = 'none';
+  document.getElementById('bulk-plot-step-1').style.display = 'block';
+}
+
+const formBulkPlot = document.getElementById('form-bulk-plot');
+if(formBulkPlot) {
+  formBulkPlot.addEventListener('submit', function(e) {
+    e.preventDefault();
+    let kruTerpilih = [];
+    document.querySelectorAll('.bulk-plot-checkbox:checked').forEach(cb => {
+      kruTerpilih.push(cb.value);
+    });
+
+    const btn = document.getElementById('btn-submit-bulk-plot');
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Memproses...';
+    btn.disabled = true;
+
+    const namaKapal = document.getElementById('bulk_plot_kapal').value;
+
+    google.script.run
+      .withSuccessHandler(function(pesan) {
+        alert(pesan);
+        bootstrap.Modal.getInstance(document.getElementById('modalBulkPlotting')).hide();
+        btn.innerHTML = '<i class="bi bi-check-circle-fill"></i> Simpan Plotting';
+        btn.disabled = false;
+        formBulkPlot.reset();
+        loadDataCrew(); // Refresh data utama agar status terupdate di tabel depan
+      })
+      .withFailureHandler(function(err){ 
+        alert("Error: " + err.message); btn.disabled = false; btn.innerHTML = 'Gagal';
+      })
+      .prosesMutasiPlottingMassal(kruTerpilih, namaKapal);
+  });
+}
+</script>

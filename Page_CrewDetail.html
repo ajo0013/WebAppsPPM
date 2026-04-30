@@ -1,0 +1,753 @@
+<div id="view-CrewDetail" class="page-view" style="display: none;">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 gap-3">
+        <div>
+            <button class="btn btn-outline-secondary btn-sm mb-2 fw-bold" onclick="loadPage('CrewList')">&larr; Kembali ke Daftar</button>
+            <h3 id="detail-nama-kru" class="fw-bold mb-0 text-dark">Memuat Profil...</h3>
+        </div>
+        <div class="d-flex gap-2">     
+            <button class="btn btn-outline-primary shadow-sm fw-bold" onclick="bukaModalEdit()"><i class="bi bi-pencil-square"></i> Edit Profil</button>
+            <button class="btn btn-success shadow-sm fw-bold" onclick="bukaModalCetakCV()"><i class="bi bi-file-earmark-pdf-fill"></i> Cetak CV</button>
+            <button class="btn btn-danger shadow-sm fw-bold" id="btn-delete-master" onclick="hapusKruUtama()"><i class="bi bi-trash-fill"></i> Hapus</button>
+        </div>
+    </div>
+
+    <div class="card card-modern mb-4">
+        <div class="card-body p-4 row align-items-center">
+            <div class="col-md-3 text-center border-end border-light">
+                <img id="detail-foto" src="" class="img-fluid rounded-circle mb-3 shadow" style="width: 140px; height: 140px; object-fit: cover; border: 4px solid #fff;" alt="Foto">
+                <h5 id="detail-kode" class="fw-bold text-primary mb-1">Kode</h5>
+                <span id="detail-status" class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-2">Status</span>
+            </div>
+            <div class="col-md-9 ps-md-4 mt-4 mt-md-0">
+                <div class="row g-3">
+                    <div class="col-sm-6">
+                        <small class="text-muted fw-bold mb-1 d-block">TGL MULAI STANDBY</small>
+                        <span id="detail-tgl-input" class="fw-medium text-success">-</span>
+                    </div>
+                    <div class="col-sm-6">
+                        <small class="text-muted fw-bold mb-1 d-block">JABATAN</small>
+                        <span id="detail-jabatan" class="fs-5 fw-bold text-dark">-</span>
+                    </div>
+                    <div class="col-sm-6">
+                        <small class="text-muted fw-bold mb-1 d-block">NIK KTP</small>
+                        <span id="detail-nik" class="fw-medium">-</span>
+                    </div>
+                    <div class="col-sm-6">
+                        <small class="text-muted fw-bold mb-1 d-block">TEMPAT, TGL LAHIR</small>
+                        <span id="detail-ttl" class="fw-medium">-</span> <span class="badge bg-light text-dark ms-1" id="detail-usia"></span>
+                    </div>
+                    <div class="col-sm-6">
+                        <small class="text-muted fw-bold mb-1 d-block">KONTAK</small>
+                        <span class="d-block fw-medium"><i class="bi bi-telephone text-muted me-1"></i> <span id="detail-telepon">-</span></span>
+                        <span class="d-block fw-medium"><i class="bi bi-envelope text-muted me-1"></i> <span id="detail-email">-</span></span>
+                    </div>
+                    <div class="col-sm-6">
+                        <small class="text-muted fw-bold mb-1 d-block">SKILL KHUSUS</small>
+                        <span id="detail-skill" class="fw-medium text-primary">-</span>
+                    </div>
+                    <div class="col-sm-6">
+                        <small class="text-muted fw-bold mb-1 d-block">ASAL DAERAH</small>
+                        <span id="detail-asal" class="fw-medium">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card card-modern border-0">
+        <div class="card-header bg-white border-bottom-0 pt-3 px-4 pb-0">
+            <ul class="nav nav-tabs border-bottom-0" id="myTab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active fw-bold text-dark px-4 pb-3" data-bs-toggle="tab" data-bs-target="#tab-fam" type="button" style="border:none; border-bottom: 3px solid #4361ee;">Keluarga (NOK)</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-bold text-muted px-4 pb-3" data-bs-toggle="tab" data-bs-target="#tab-doc" type="button" style="border:none;">Sertifikat</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-bold text-muted px-4 pb-3" data-bs-toggle="tab" data-bs-target="#tab-sea" type="button" style="border:none;">Pengalaman Layar</button>
+                </li>
+            </ul>
+        </div>
+        <div class="card-body p-4 bg-light bg-opacity-50">
+            <div class="tab-content" id="myTabContent">
+                
+                <div class="tab-pane fade show active" id="tab-fam">
+                    <div class="d-flex justify-content-between mb-3 align-items-center">
+                        <h6 class="fw-bold mb-0 text-dark">Daftar Kontak Darurat (NOK)</h6>
+                        <button class="btn btn-sm btn-primary shadow-sm fw-bold" onclick="bukaModalFam()"><i class="bi bi-plus-lg"></i> Tambah</button>
+                    </div>
+                    <div class="table-modern-wrapper">
+                        <table class="table table-hover mb-0">
+                            <thead class="bg-light"><tr><th class="ps-3">Nama</th><th>Hubungan</th><th>Telepon</th><th class="text-center pe-3">Aksi</th></tr></thead>
+                            <tbody id="table-fam"><tr><td colspan="4" class="text-center py-4 text-muted">Sedang memuat data...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="tab-pane fade" id="tab-doc">
+                    <div class="d-flex justify-content-between mb-3 align-items-center">
+                        <h6 class="fw-bold mb-0 text-dark">Manajemen Dokumen & Sertifikat</h6>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-primary fw-bold shadow-sm" id="btn-download-zip" onclick="prosesDownloadZipDokumen()">
+                            <i class="bi bi-file-earmark-zip-fill"></i> Download ZIP Dokumen
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger fw-bold" onclick="bukaModalCetakTandaTerima()"><i class="bi bi-printer"></i> Tanda Terima</button>
+                            <button class="btn btn-sm btn-outline-primary fw-bold" onclick="bukaModalManualDoc()"><i class="bi bi-input-cursor-text"></i> Input Manual</button>
+                            <button class="btn btn-sm btn-primary shadow-sm fw-bold" onclick="bukaModalDoc()"><i class="bi bi-cloud-arrow-up-fill"></i> Bulk Upload</button>
+                        </div>
+                    </div>
+                    <div class="table-modern-wrapper">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="bg-light">
+                                <tr><th class="ps-3">Tipe</th><th>Nomor</th><th>Tempat Terbit</th><th>Issued</th><th>Expiry</th><th class="text-center pe-3" style="width: 130px;">Aksi</th></tr>
+                            </thead>
+                            <tbody id="table-doc"><tr><td colspan="6" class="text-center py-4 text-muted">Sedang memuat data dokumen...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="tab-sea">
+                    <div class="d-flex justify-content-between mb-3 align-items-center">
+                        <h6 class="fw-bold mb-0 text-dark">Riwayat Kapal Sebelumnya</h6>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-primary fw-bold" onclick="bukaModalManualSea()"><i class="bi bi-input-cursor-text"></i> Input Manual</button>
+                            <button class="btn btn-sm btn-primary shadow-sm fw-bold" onclick="bukaModalSea()"><i class="bi bi-clipboard2-fill"></i> Bulk Paste Excel</button>
+                        </div>
+                    </div>
+                    <div class="table-modern-wrapper">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="bg-light"><tr><th class="ps-3">Kapal</th><th>Jenis</th><th>Rank</th><th>Perusahaan</th><th>Sign On - Off</th><th>Durasi</th><th class="text-center pe-3">Aksi</th></tr></thead>
+                            <tbody id="table-sea"><tr><td colspan="7" class="text-center py-4 text-muted">Sedang memuat data...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.querySelectorAll('.nav-link').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.nav-link').forEach(t => {
+                    t.classList.remove('text-dark', 'active');
+                    t.classList.add('text-muted');
+                    t.style.borderBottom = "none";
+                });
+                this.classList.remove('text-muted');
+                this.classList.add('text-dark', 'active');
+                this.style.borderBottom = "3px solid #4361ee";
+            });
+        });
+    </script>
+
+    <div class="modal fade" id="modalEditCrew" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-white border-bottom">
+                    <h5 class="modal-title fw-bold text-dark"><i class="bi bi-pencil-square text-primary me-2"></i> Edit Data Kru</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="form-edit-crew">
+                    <div class="modal-body bg-light">
+                      <div class="col-md-4"><label class="form-label small fw-bold text-muted">Tgl Input/Standby</label><input type="date" class="form-control border-0 shadow-sm" name="edit_tanggal_input" id="edit_tanggal_input"></div>
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label class="form-label small fw-bold text-muted">Kode Crew</label><input type="text" class="form-control border-0 shadow-sm" name="edit_kode_crew" id="edit_kode_crew" readonly></div>
+                            <div class="col-md-6"><label class="form-label small fw-bold text-muted">Nama Lengkap</label><input type="text" class="form-control border-0 shadow-sm" name="edit_nama_lengkap" id="edit_nama_lengkap" required></div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label class="form-label small fw-bold text-muted">Jabatan</label><select class="form-select border-0 shadow-sm" name="edit_jabatan" id="edit_jabatan" required></select></div>
+                            <div class="col-md-6"><label class="form-label small fw-bold text-muted">Status</label><select class="form-select border-0 shadow-sm" name="edit_status" id="edit_status" required></select></div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label class="form-label small fw-bold text-muted">Tempat Lahir</label><input type="text" class="form-control border-0 shadow-sm" name="edit_tempat_lahir" id="edit_tempat_lahir"></div>
+                            <div class="col-md-6"><label class="form-label small fw-bold text-muted">Tanggal Lahir</label><input type="date" class="form-control border-0 shadow-sm" name="edit_tanggal_lahir" id="edit_tanggal_lahir"></div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label class="form-label small fw-bold text-muted">Nomor Telepon</label><input type="text" class="form-control border-0 shadow-sm" name="edit_telepon" id="edit_telepon"></div>
+                            <div class="col-md-6"><label class="form-label small fw-bold text-muted">Email</label><input type="email" class="form-control border-0 shadow-sm" name="edit_email" id="edit_email"></div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6"><label class="form-label small fw-bold text-muted">Asal Daerah</label><input type="text" class="form-control border-0 shadow-sm" name="edit_asal_daerah" id="edit_asal_daerah"></div>
+                            <div class="col-md-6"><label class="form-label small fw-bold text-muted">NIK (KTP)</label><input type="text" class="form-control border-0 shadow-sm" name="edit_nik" id="edit_nik"></div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-12"><label class="form-label small fw-bold text-muted">Skill Khusus</label><input type="text" class="form-control border-0 shadow-sm" name="edit_skill" id="edit_skill"></div>
+                        </div>
+                        <div class="row mt-4 pt-3 border-top">
+                            <div class="col-md-4"><label class="form-label small fw-bold text-primary">Upload Foto Baru</label><input type="file" class="form-control form-control-sm" id="edit_file_foto" accept=".jpg,.jpeg,.png"></div>
+                            <div class="col-md-4"><label class="form-label small fw-bold text-primary">Upload KTP Baru</label><input type="file" class="form-control form-control-sm" id="edit_file_ktp" accept=".pdf,.jpg,.jpeg,.png"></div>
+                            <div class="col-md-4"><label class="form-label small fw-bold text-primary">Upload TTD Baru</label><input type="file" class="form-control form-control-sm" id="edit_file_ttd" accept=".jpg,.jpeg,.png"></div>
+                            <div class="col-12 mt-1"><small class="text-muted">*Kosongkan jika tidak ingin mengubah file lama.</small></div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="submit" class="btn btn-primary px-4" id="btn-simpan-edit">Update Data</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="modalTambahFam" tabindex="-1" aria-hidden="true">
+
+        <div class="modal-dialog">
+
+            <div class="modal-content">
+
+                <div class="modal-header bg-primary text-white"><h5 class="modal-title">Tambah Data Keluarga</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+
+                <form id="form-tambah-fam">
+
+                    <div class="modal-body">
+
+                        <input type="hidden" name="fam_kode_crew" id="fam_kode_crew">
+
+                        <div class="mb-3"><label class="form-label">Nama Anggota Keluarga</label><input type="text" class="form-control" name="fam_nama" required></div>
+
+                        <div class="mb-3"><label class="form-label">Hubungan</label><input type="text" class="form-control" name="fam_hubungan" required></div>
+
+                        <div class="mb-3"><label class="form-label">Tanggal Lahir</label><input type="date" class="form-control" name="fam_tgl_lahir"></div>
+
+                        <div class="mb-3"><label class="form-label">Nomor Telepon</label><input type="text" class="form-control" name="fam_telepon"></div>
+
+                        <div class="mb-3"><label class="form-label">Asal Daerah / Alamat</label><input type="text" class="form-control" name="fam_asal"></div>
+
+                    </div>
+
+                    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button type="submit" class="btn btn-primary" id="btn-simpan-fam">Simpan Data</button></div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div class="modal fade" id="modalTambahSea" tabindex="-1" aria-hidden="true">
+
+        <div class="modal-dialog modal-xl">
+
+            <div class="modal-content">
+
+                <div class="modal-header bg-dark text-white"><h5 class="modal-title">Bulk Input Pengalaman Layar</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+
+                <div class="modal-body">
+
+                    <input type="hidden" id="bulk_sea_kode_crew">
+
+                    <div class="alert alert-info py-2"><small><strong>Cara Pakai:</strong> Copy data dari Excel (7 Kolom: Kapal, Bendera, GRT, Rank, Perusahaan, Sign On, Sign Off), lalu paste di kotak bawah.</small></div>
+
+                    <div class="mb-3"><textarea class="form-control" id="excel_paste_sea" rows="1" placeholder="Paste data Pengalaman dari Excel di sini..."></textarea></div>
+
+                    <div class="table-responsive">
+
+                        <table class="table table-sm table-bordered" style="font-size: 0.85rem;">
+
+                            <thead class="table-light"><tr><th>Nama Kapal</th><th>Jenis Kapal</th><th>Bendera</th><th>GRT</th><th>Rank</th><th>Perusahaan</th><th>Sign On</th><th>Sign Off</th><th>Durasi</th></tr></thead>
+
+                            <tbody id="bulk_sea_table_body"><tr><td colspan="9" class="text-center text-muted">Belum ada data di-paste</td></tr></tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button><button type="button" class="btn btn-dark" id="btn-save-sea-bulk" onclick="prosesSimpanSeaBulk()">Simpan Semua Pengalaman</button></div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div class="modal fade" id="modalManualSea" tabindex="-1" aria-hidden="true">
+
+        <div class="modal-dialog modal-lg">
+
+            <div class="modal-content">
+
+                <div class="modal-header bg-dark text-white"><h5 class="modal-title">Input Manual Pengalaman</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+
+                <form id="form-manual-sea">
+
+                    <div class="modal-body">
+
+                        <input type="hidden" name="sea_kode_crew" id="man_sea_kode_crew">
+
+                        <div class="row mb-3">
+
+                            <div class="col-5"><label class="form-label">Nama Kapal</label><input type="text" class="form-control" name="sea_kapal" required></div>
+
+                            <div class="col-4"><label class="form-label">Jenis Kapal</label><select class="form-select dropdown-kapal" name="sea_jenis_kapal" required></select></div>
+
+                            <div class="col-3"><label class="form-label">Bendera</label><input type="text" class="form-control" name="sea_bendera"></div>
+
+                        </div>
+
+                        <div class="row mb-3">
+
+                            <div class="col-4"><label class="form-label">GRT</label><input type="text" class="form-control" name="sea_grt"></div>
+
+                            <div class="col-4"><label class="form-label">Rank</label><input type="text" class="form-control" name="sea_rank"></div>
+
+                            <div class="col-4"><label class="form-label">Perusahaan</label><input type="text" class="form-control" name="sea_perusahaan"></div>
+
+                        </div>
+
+                        <div class="row mb-3">
+
+                            <div class="col-6"><label class="form-label">Sign On</label><input type="date" class="form-control" name="sea_on"></div>
+
+                            <div class="col-6"><label class="form-label">Sign Off</label><input type="date" class="form-control" name="sea_off"></div>
+
+                        </div>
+
+                    </div>
+
+                    <div class="modal-footer"><button type="submit" class="btn btn-dark" id="btn-save-man-sea">Simpan Pengalaman</button></div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div class="modal fade" id="modalTambahDoc" tabindex="-1" aria-hidden="true">
+
+        <div class="modal-dialog modal-xl"> 
+
+            <div class="modal-content">
+
+                <div class="modal-header bg-success text-white"><h5 class="modal-title">Bulk Upload Sertifikat Kru</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+
+                <div class="modal-body">
+
+                    <input type="hidden" id="bulk_doc_kode_crew">
+
+                    <div class="row mb-3">
+
+                        <div class="col-md-6"><label class="form-label fw-bold">1. Pilih Semua File Sertifikat (PDF/JPG)</label><input type="file" class="form-control" id="bulk_doc_files" multiple accept=".pdf,.jpg,.jpeg,.png"></div>
+
+                        <div class="col-md-6"><label class="form-label fw-bold">2. Paste Data dari Excel (Tipe, No, Tempat, Issued, Expiry)</label><textarea class="form-control" id="excel_paste_area" rows="1" placeholder="Paste dari Excel di sini..."></textarea></div>
+
+                    </div>
+
+                    <div class="table-responsive">
+
+                        <table class="table table-sm table-bordered">
+
+                            <thead class="table-light"><tr><th>Nama File</th><th>Tipe Dokumen</th><th>Nomor</th><th>Tempat</th><th>Issued</th><th>Expiry</th></tr></thead>
+
+                            <tbody id="bulk_doc_table_body"><tr><td colspan="6" class="text-center text-muted">Belum ada file dipilih</td></tr></tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+
+                    <span id="upload_progress" class="me-auto fw-bold text-primary"></span>
+
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+
+                    <button type="button" class="btn btn-success" id="btn-save-bulk" onclick="prosesSimpanBulk()">Simpan Semua Dokumen</button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div class="modal fade" id="modalManualDoc" tabindex="-1" aria-hidden="true">
+
+        <div class="modal-dialog">
+
+            <div class="modal-content">
+
+                <div class="modal-header bg-secondary text-white"><h5 class="modal-title">Input Manual Dokumen</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+
+                <form id="form-manual-doc">
+
+                    <div class="modal-body">
+
+                        <input type="hidden" name="doc_kode_crew" id="man_doc_kode_crew">
+
+                        <div class="mb-3"><label class="form-label">Tipe Dokumen</label><input type="text" class="form-control" name="doc_tipe" required placeholder="Cth: BST, Paspor"></div>
+
+                        <div class="mb-3"><label class="form-label">Nomor Dokumen</label><input type="text" class="form-control" name="doc_nomor" required></div>
+
+                        <div class="mb-3"><label class="form-label">Tempat Terbit</label><input type="text" class="form-control" name="doc_tempat"></div>
+
+                        <div class="row">
+
+                            <div class="col-6 mb-3"><label class="form-label">Issued</label><input type="date" class="form-control" name="doc_issued"></div>
+
+                            <div class="col-6 mb-3"><label class="form-label">Expiry</label><input type="date" class="form-control" name="doc_expiry"></div>
+
+                        </div>
+
+                        <p class="text-muted small">* File bisa diupload nanti lewat menu Edit Dokumen.</p>
+
+                    </div>
+
+                    <div class="modal-footer"><button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button><button type="submit" class="btn btn-sm btn-primary" id="btn-save-man">Simpan Data</button></div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div class="modal fade" id="modalEditDoc" tabindex="-1" aria-hidden="true">
+
+        <div class="modal-dialog">
+
+            <div class="modal-content">
+
+                <div class="modal-header bg-warning"><h5 class="modal-title fw-bold">Edit / Upload Susulan Dokumen</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+
+                <form id="form-edit-doc">
+
+                    <div class="modal-body">
+
+                        <input type="hidden" name="doc_id" id="edit_doc_id">
+
+                        <input type="hidden" name="doc_kode_crew" id="edit_doc_kode_crew">
+
+                        <div class="mb-3"><label class="form-label">Tipe Dokumen</label><input type="text" class="form-control" name="doc_tipe" id="edit_doc_tipe" required></div>
+
+                        <div class="mb-3"><label class="form-label">Nomor Dokumen</label><input type="text" class="form-control" name="doc_nomor" id="edit_doc_nomor" required></div>
+
+                        <div class="mb-3"><label class="form-label">Tempat Terbit</label><input type="text" class="form-control" name="doc_tempat" id="edit_doc_tempat"></div>
+
+                        <div class="row">
+
+                            <div class="col-6 mb-3"><label class="form-label">Issued</label><input type="date" class="form-control" name="doc_issued" id="edit_doc_issued"></div>
+
+                            <div class="col-6 mb-3"><label class="form-label">Expiry</label><input type="date" class="form-control" name="doc_expiry" id="edit_doc_expiry"></div>
+
+                        </div>
+
+                        <div class="mb-3 border p-2 bg-light rounded">
+
+                            <label class="form-label fw-bold text-primary">Upload / Ganti File Scan</label>
+
+                            <input type="file" class="form-control" id="edit_doc_file" accept=".pdf,.jpg,.jpeg,.png">
+
+                            <small class="text-muted">Biarkan kosong jika tidak ingin mengganti file.</small>
+
+                        </div>
+
+                    </div>
+
+                    <div class="modal-footer"><button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Batal</button><button type="submit" class="btn btn-sm btn-warning fw-bold" id="btn-update-doc">Update Dokumen</button></div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div class="modal fade" id="modalEditFam" tabindex="-1" aria-hidden="true">
+
+        <div class="modal-dialog">
+
+            <div class="modal-content">
+
+                <div class="modal-header bg-warning"><h5 class="modal-title fw-bold">Edit Data Keluarga</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+
+                <form id="form-edit-fam">
+
+                    <div class="modal-body">
+
+                        <input type="hidden" name="fam_id" id="edit_fam_id">
+
+                        <div class="mb-3"><label class="form-label">Nama</label><input type="text" class="form-control" name="fam_nama" id="edit_fam_nama" required></div>
+
+                        <div class="mb-3"><label class="form-label">Hubungan</label><input type="text" class="form-control" name="fam_hubungan" id="edit_fam_hubungan" required></div>
+
+                        <div class="mb-3"><label class="form-label">Tgl Lahir</label><input type="date" class="form-control" name="fam_tgl_lahir" id="edit_fam_tgl"></div>
+
+                        <div class="mb-3"><label class="form-label">Telepon</label><input type="text" class="form-control" name="fam_telepon" id="edit_fam_telp"></div>
+
+                        <div class="mb-3"><label class="form-label">Asal/Alamat</label><input type="text" class="form-control" name="fam_asal" id="edit_fam_asal"></div>
+
+                    </div>
+
+                    <div class="modal-footer"><button type="submit" class="btn btn-warning" id="btn-update-fam">Update Keluarga</button></div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div class="modal fade" id="modalEditSea" tabindex="-1" aria-hidden="true">
+
+        <div class="modal-dialog modal-lg">
+
+            <div class="modal-content">
+
+                <div class="modal-header bg-warning"><h5 class="modal-title fw-bold">Edit Pengalaman Layar</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+
+                <form id="form-edit-sea">
+
+                    <div class="modal-body">
+
+                        <input type="hidden" name="sea_id" id="edit_sea_id">
+
+                        <div class="row mb-3">
+
+                            <div class="col-5"><label class="form-label">Nama Kapal</label><input type="text" class="form-control" name="sea_kapal" id="edit_sea_kapal" required></div>
+
+                            <div class="col-4"><label class="form-label">Jenis Kapal</label><select class="form-select dropdown-kapal" name="sea_jenis_kapal" id="edit_sea_jenis_kapal" required></select></div>
+
+                            <div class="col-3"><label class="form-label">Bendera</label><input type="text" class="form-control" name="sea_bendera" id="edit_sea_bendera"></div>
+
+                        </div>
+
+                        <div class="row mb-3">
+
+                            <div class="col-4"><label class="form-label">GRT</label><input type="text" class="form-control" name="sea_grt" id="edit_sea_grt"></div>
+
+                            <div class="col-4"><label class="form-label">Rank</label><input type="text" class="form-control" name="sea_rank" id="edit_sea_rank"></div>
+
+                            <div class="col-4"><label class="form-label">Perusahaan</label><input type="text" class="form-control" name="sea_perusahaan" id="edit_sea_perush"></div>
+
+                        </div>
+
+                        <div class="row mb-3">
+
+                            <div class="col-6"><label class="form-label">Sign On</label><input type="date" class="form-control" name="sea_on" id="edit_sea_on"></div>
+
+                            <div class="col-6"><label class="form-label">Sign Off</label><input type="date" class="form-control" name="sea_off" id="edit_sea_off"></div>
+
+                        </div>
+
+                    </div>
+
+                    <div class="modal-footer"><button type="submit" class="btn btn-warning" id="btn-update-sea">Update Pengalaman</button></div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div class="modal fade" id="modalCetakPDF" tabindex="-1" aria-hidden="true">
+
+        <div class="modal-dialog">
+
+            <div class="modal-content">
+
+                <div class="modal-header bg-danger text-white">
+
+                    <h5 class="modal-title fw-bold">Cetak Tanda Terima Dokumen</h5>
+
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+
+                </div>
+
+                <div class="modal-body">
+
+                    <div class="alert alert-warning py-2 small">
+
+                        <strong>Info:</strong> Nomor surat otomatis berlanjut dari nomor terakhir. Anda bisa mengeditnya manual jika diperlukan.
+
+                    </div>
+
+                    <div class="mb-3">
+
+                        <label class="form-label fw-bold">Nomor Surat Saat Ini</label>
+
+                        <input type="text" class="form-control fw-bold text-center" id="cetak_nomor_surat">
+
+                        <input type="hidden" id="cetak_angka_urut">
+
+                    </div>
+
+                    <div class="mb-3">
+
+                        <label class="form-label fw-bold">ID Gambar Kop Surat (Dari Drive)</label>
+
+                        <input type="text" class="form-control" id="cetak_id_kop" placeholder="Contoh: 1aB2cDe3Fgh...">
+
+                        <small class="text-muted">Dapatkan ID dengan cara klik Kanan gambar Kop Surat di Drive > Dapatkan Link, ambil kode panjang di tengah link.</small>
+
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+
+                    <button type="button" class="btn btn-danger fw-bold" id="btn-generate-pdf" onclick="prosesCetakPDF()">Download PDF</button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <div class="modal fade" id="modalCetakCV" tabindex="-1" aria-hidden="true">
+
+        <div class="modal-dialog">
+
+            <div class="modal-content">
+
+                <div class="modal-header bg-success text-white">
+
+                    <h5 class="modal-title fw-bold">Generate CV Otomatis</h5>
+
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+
+                </div>
+
+                <div class="modal-body">
+
+                    <p>Sistem akan menerjemahkan singkatan dokumen (PP, CDC, BST) ke bahasa Inggris dan menyusunnya ke dalam format CV standar pelayaran (STCW).</p>
+
+                    <div class="mb-3">
+
+                        <label class="form-label fw-bold">ID Gambar Kop Surat (Dari Drive)</label>
+
+                        <input type="text" class="form-control" id="cv_id_kop">
+
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+
+                    <button type="button" class="btn btn-success fw-bold" id="btn-generate-cv" onclick="prosesCetakCV()">Buat CV PDF</button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+    <div class="modal fade" id="modalProsesOnboard" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title fw-bold"><i class="bi bi-rocket-takeoff-fill"></i> Deploy Kru (Sign On)</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="form-onboard">
+        <div class="modal-body p-4">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label fw-bold">Tanggal Sign On</label>
+              <input type="date" class="form-control border-success" id="dep_tgl_onboard" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold text-primary"><i class="bi bi-calendar-check"></i> Bulan Laporan</label>
+              <input type="month" class="form-control border-primary bg-primary bg-opacity-10" id="dep_bulan_lapor_on" title="Masuk ke laporan bulan apa?" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold small">Nama Kapal</label>
+              <input type="text" class="form-control" id="dep_kapal" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold small">Perusahaan / Owner</label>
+              <input type="text" class="form-control" id="dep_perusahaan">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-bold small">Jabatan (Rank)</label>
+              <input type="text" class="form-control" id="dep_rank" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-bold small">Bendera</label>
+              <input type="text" class="form-control" id="dep_bendera">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-bold small">GRT</label>
+              <input type="text" class="form-control" id="dep_grt">
+            </div>
+            <div class="col-md-12">
+              <label class="form-label fw-bold small">Negara Tujuan</label>
+              <input type="text" class="form-control" id="dep_negara">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-success fw-bold" id="btn-submit-onboard"><i class="bi bi-check2-circle"></i> Berangkatkan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalProsesSignOff" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-warning">
+        <h5 class="modal-title fw-bold text-dark"><i class="bi bi-airplane-engines-fill"></i> Proses Sign Off</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="form-sign-off">
+        <div class="modal-body p-4">
+          <div class="mb-3">
+            <label class="form-label fw-bold">Tanggal Sign Off</label>
+            <input type="date" class="form-control" id="dep_tgl_signoff" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold text-primary"><i class="bi bi-calendar-check"></i> Bulan Laporan Mutasi</label>
+            <input type="month" class="form-control border-primary bg-primary bg-opacity-10" id="dep_bulan_lapor_off" title="Masuk ke laporan bulan apa?" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold">Keterangan / Alasan Turun</label>
+            <textarea class="form-control" id="dep_keterangan" rows="3" placeholder="End of Contract, Medical, dll..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-warning fw-bold text-dark" id="btn-submit-signoff"><i class="bi bi-check2-circle"></i> Proses Turun Kapal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+    </div>

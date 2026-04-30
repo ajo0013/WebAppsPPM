@@ -1,0 +1,138 @@
+<div id="view-Settings" class="page-view" style="display: none;">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="fw-bold text-dark mb-0"><i class="bi bi-gear-fill text-secondary"></i> Pengaturan Sistem</h2>
+    <button class="btn btn-primary fw-bold shadow-sm" onclick="modalTambahPengguna()"><i class="bi bi-person-plus-fill me-1"></i> Tambah Akses</button>
+  </div>
+
+  <div class="card border-0 shadow-sm rounded-4">
+    <div class="card-header bg-white border-bottom py-3">
+      <h6 class="mb-0 fw-bold text-primary"><i class="bi bi-shield-lock-fill me-2"></i> Daftar Otorisasi Web App</h6>
+    </div>
+    <div class="card-body p-0 table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="bg-light text-muted small">
+          <tr>
+            <th class="ps-4">PROFIL PENGGUNA</th>
+            <th>EMAIL GOOGLE (LOGIN)</th>
+            <th>ROLE AKSES</th>
+            <th class="text-end pe-4">AKSI</th>
+          </tr>
+        </thead>
+        <tbody id="table-body-settings">
+            <tr><td colspan="4" class="text-center py-4 text-muted">Memuat data pengguna...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  function muatDataPengguna() {
+      document.getElementById('table-body-settings').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-muted">Memuat data...</td></tr>';
+      google.script.run.withSuccessHandler(function(data) {
+          let html = '';
+          data.forEach(u => {
+              let badge = u.role === 'Admin' ? 'bg-danger' : 'bg-info';
+              
+              // PERBAIKAN: Tangani Fallback Image langsung di JS, bukan lewat onerror HTML
+              let fotoFinal = u.foto;
+              if (!fotoFinal || fotoFinal.trim() === "") {
+                 fotoFinal = "https://ui-avatars.com/api/?name=" + encodeURIComponent(u.nama || u.email) + "&background=random";
+              }
+
+              html += `
+              <tr>
+                <td class="ps-4">
+                  <div class="d-flex align-items-center">
+                    <img src="${fotoFinal}" class="rounded-circle shadow-sm me-3" style="width:40px; height:40px; object-fit:cover;">
+                    <span class="fw-bold text-dark">${u.nama}</span>
+                  </div>
+                </td>
+                <td class="text-muted fw-medium">${u.email}</td>
+                <td><span class="badge ${badge} px-3 py-2 rounded-pill">${u.role}</span></td>
+                <td class="text-end pe-4">
+                  <button class="btn btn-sm btn-outline-primary shadow-sm me-1" onclick="modalEditPengguna('${u.email}', '${u.role}', '${u.nama}', '${u.foto}')"><i class="bi bi-pencil-square"></i></button>
+                  <button class="btn btn-sm btn-outline-danger shadow-sm" onclick="hapusPengguna(${u.baris}, '${u.email}')"><i class="bi bi-trash"></i></button>
+                </td>
+              </tr>`;
+          });
+          document.getElementById('table-body-settings').innerHTML = html;
+      }).getAdminUsers();
+  }
+
+  function modalTambahPengguna() { modalEditPengguna('', 'HR', '', ''); }
+
+  function modalEditPengguna(email, role, nama, foto) {
+      let isEdit = email !== '';
+      Swal.fire({
+          title: isEdit ? 'Edit Pengguna' : 'Tambah Pengguna',
+          html: `
+            <div class="text-start">
+              <label class="fw-bold small mb-1">Email Google Valid</label>
+              <input id="swal-email" class="form-control mb-3" value="${email}" ${isEdit ? 'readonly' : ''} placeholder="contoh@gmail.com">
+              
+              <label class="fw-bold small mb-1">Nama Tampilan</label>
+              <input id="swal-nama" class="form-control mb-3" value="${nama}" placeholder="Misal: Bapak GM">
+              
+              <label class="fw-bold small mb-1">Hak Akses (Role)</label>
+              <select id="swal-role" class="form-select mb-3">
+                 <option value="HR" ${role === 'HR' ? 'selected' : ''}>HR (Hanya Lihat & Cetak)</option>
+                 <option value="Admin" ${role === 'Admin' ? 'selected' : ''}>Admin (Kontrol Penuh)</option>
+              </select>
+              
+              <label class="fw-bold small mb-1">URL Foto (Bisa Link Google Drive)</label>
+              <input id="swal-foto" class="form-control" value="${foto}" placeholder="Paste link foto di sini...">
+            </div>
+          `,
+          showCancelButton: true,
+          confirmButtonText: '<i class="bi bi-save"></i> Simpan',
+          cancelButtonText: 'Batal',
+          preConfirm: () => {
+              const e = document.getElementById('swal-email').value;
+              const n = document.getElementById('swal-nama').value;
+              const r = document.getElementById('swal-role').value;
+              let rawFoto = document.getElementById('swal-foto').value;
+              
+              // ==========================================
+              // MAGIC: AUTO-CONVERT LINK GOOGLE DRIVE
+              // ==========================================
+              if (rawFoto.includes("drive.google.com")) {
+                  let fileId = "";
+                  // Ekstrak ID dari format /file/d/ID/view
+                  const matchFileD = rawFoto.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                  // Ekstrak ID dari format open?id=ID
+                  const matchId = rawFoto.match(/id=([a-zA-Z0-9_-]+)/);
+                  
+                  if (matchFileD) { fileId = matchFileD[1]; } 
+                  else if (matchId) { fileId = matchId[1]; }
+                  
+                  // Jika ID ketemu, gunakan Trik THUMBNAIL API (Anti-Blokir & Loading Cepat)
+                  if (fileId) {
+                      // sz=w500 artinya kita minta gambar dengan lebar 500px agar tajam tapi ringan
+                      rawFoto = "https://drive.google.com/thumbnail?id=" + fileId + "&sz=w500";
+                  }
+              }
+
+              if(!e || !n) { Swal.showValidationMessage('Email dan Nama wajib diisi!'); return false; }
+              return { email: e, nama: n, role: r, foto: rawFoto };
+          }
+      }).then((result) => {
+          if (result.isConfirmed) {
+              google.script.run.withSuccessHandler(res => {
+                  alert(res); muatDataPengguna();
+              }).simpanAdminUser(result.value.email, result.value.role, result.value.nama, result.value.foto);
+          }
+      });
+  }
+
+  function hapusPengguna(baris, email) {
+      Swal.fire({
+          title: 'Cabut Akses?', text: `Hapus akses untuk ${email}?`, icon: 'warning',
+          showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Hapus'
+      }).then((res) => {
+          if (res.isConfirmed) {
+              google.script.run.withSuccessHandler(pesan => { alert(pesan); muatDataPengguna(); }).hapusAdminUser(baris, email);
+          }
+      });
+  }
+</script>

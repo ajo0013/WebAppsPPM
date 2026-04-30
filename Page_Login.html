@@ -1,0 +1,139 @@
+<div id="login-screen" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--light-modern); z-index: 99999; display: flex; align-items: center; justify-content: center; flex-direction: column;">
+    <div class="card shadow-lg border-0" style="width: 100%; max-width: 400px; border-radius: 20px; overflow: hidden;">
+        <div class="bg-gradient-primary p-4 text-center">
+            <i class="bi bi-shield-lock-fill text-white mb-2" style="font-size: 3rem;"></i>
+            <h4 class="fw-bold text-white mb-0">PPM System Portal</h4>
+        </div>
+        <div class="card-body p-5 text-center bg-white" id="login-body">
+            <div class="spinner-border text-primary mb-4" style="width: 3rem; height: 3rem;"></div>
+            <h5 class="fw-bold text-dark">Memverifikasi Akun Google...</h5>
+            <p class="text-muted small">Sistem sedang mendeteksi identitas Anda. Mohon tunggu.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Otomatis verifikasi saat halaman pertama kali dibuka
+        google.script.run
+            .withSuccessHandler(function(res) {
+                const body = document.getElementById('login-body');
+                if (res.status) {
+                    body.innerHTML = `
+                        <i class="bi bi-check-circle-fill text-success" style="font-size: 3.5rem;"></i>
+                        <h5 class="fw-bold text-dark mt-3">Akses Diberikan</h5>
+                        <p class="text-muted">Selamat datang kembali, <strong class="text-primary">${res.nama}</strong></p>
+                    `;
+                    
+                    // SUNTIKKAN DATA PROFIL KE SIDEBAR
+                    document.getElementById('sidebar-user-name').innerText = res.nama;
+                    document.getElementById('sidebar-user-photo').src = res.foto;
+                    
+                    const badge = document.getElementById('sidebar-user-role-badge');
+                    badge.innerText = res.role.toUpperCase();
+                    if(res.role === 'Admin') {
+                        badge.classList.add('badge-role-admin');
+                    } else {
+                        badge.classList.add('badge-role-hr');
+                    }
+
+                    // PROTEKSI: SEMBUNYIKAN ICON GEAR JIKA HR YANG LOGIN
+                    const gearBtn = document.getElementById('btn-settings-gear');
+                    if (res.role === 'HR') {
+                        if(gearBtn) gearBtn.style.display = 'none'; 
+                    } else {
+                        if(gearBtn) gearBtn.style.display = 'block';
+                    }
+
+                    // ==========================================
+                    // INI YANG HILANG KEMARIN: AKTIFKAN GEMBOKNYA!
+                    // ==========================================
+                    terapkanHakAkses(res.role); 
+
+                    if (typeof mulaiAutoLogout === "function") mulaiAutoLogout(); 
+                    
+                    setTimeout(() => {
+                        document.getElementById('login-screen').style.display = 'none';
+                        loadPage('Dashboard'); 
+                    }, 1500);
+                } else {
+                    body.innerHTML = `
+                        <i class="bi bi-x-circle-fill text-danger" style="font-size: 3.5rem;"></i>
+                        <h5 class="fw-bold text-dark mt-3">Akses Ditolak</h5>
+                        <p class="text-danger fw-medium">${res.pesan}</p>
+                        <p class="text-muted small mt-3">Pastikan Anda login menggunakan email Google kantor yang sudah didaftarkan.</p>
+                        <button class="btn btn-outline-primary btn-sm mt-2" onclick="location.reload()">Coba Lagi</button>
+                    `;
+                }
+            })
+            .withFailureHandler(function(err) {
+                document.getElementById('login-body').innerHTML = `<p class="text-danger fw-bold mt-4">Koneksi Error: ${err.message}</p>`;
+            })
+            .verifikasiLoginGoogle();
+    });
+
+    // ==========================================
+    // FUNGSI GEMBOK (SECURITY CLEARANCE) DIPERKUAT
+    // ==========================================
+    function terapkanHakAkses(role) {
+        if (role === 'HR') {
+            // 1. Suntikkan CSS untuk menyembunyikan secara visual
+            const style = document.createElement('style');
+            // Beri ID khusus agar kita bisa melindunginya
+            style.id = "security-lock-css"; 
+            style.innerHTML = `
+                /* Sembunyikan Target Modal Tambah */
+                [data-bs-target*="#modalTambah"], 
+                /* Sembunyikan fungsi Tambah (Kru, Kapal, Principal) */
+                [onclick*="bukaKeTambahKru"],
+                [onclick*="modalTambah"], 
+                [onclick*="Tambah"],
+                /* Sembunyikan fungsi Edit & Hapus semua modul */
+                [onclick*="bukaModalEdit"], 
+                [onclick*="editKapal"], 
+                [onclick*="editPrincipal"], 
+                [onclick*="hapus"], 
+                /* Sembunyikan Aksi Mutasi & Simpan */
+                [onclick*="BulkOnboard"], 
+                [onclick*="bukaModalBulk"], 
+                [onclick*="simpan"], 
+                /* Sembunyikan Blacklist & Tombol Delete Master */
+                [onclick*="loadPage('Blacklist')"],
+                [onclick*="pemicuBlacklist"], 
+                #btn-delete-master,
+                /* Sembunyikan Menu Settings Utama */
+                #menu-settings-container {
+                    display: none !important;
+                }
+            `;
+            document.head.appendChild(style);
+
+            // 2. LINDUNGI CSS DARI INSPECT ELEMENT (HACK)
+            // Jika ada yang mencoba menghapus tag <style id="security-lock-css">, kita kembalikan lagi!
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    if (mutation.removedNodes) {
+                        mutation.removedNodes.forEach(function(node) {
+                            if (node.id === 'security-lock-css') {
+                                document.head.appendChild(style); // Pasang balik!
+                            }
+                        });
+                    }
+                });
+            });
+            observer.observe(document.head, { childList: true });
+
+            // 3. Bersihkan teks Dropdown yang masih muncul manual
+            setTimeout(() => {
+                document.querySelectorAll('.dropdown, .nav-item').forEach(el => {
+                    let teks = (el.innerText || "").toLowerCase();
+                    if (teks.includes('tambah data') || teks.includes('aksi mutasi')) {
+                        el.style.setProperty('display', 'none', 'important');
+                    }
+                });
+            }, 1000);
+            
+            console.log("🔒 SECURITY ACTIVE: Mode Read-Only (HR) Diaktifkan Secara Berlapis.");
+        }
+    }
+</script>
