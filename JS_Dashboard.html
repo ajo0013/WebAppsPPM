@@ -23,51 +23,52 @@
     // 3. MESIN PENARIK DATA SUPER CEPAT (BATCHING)
     // ==========================================
     function refreshDashboardKeren() {
-        // Tampilkan animasi loading di semua kartu
-        ['dash-total', 'dash-onboard', 'dash-standby', 'dash-plotting'].forEach(id => {
-            document.getElementById(id).innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-        });
-        document.getElementById('dash-count-kapal').innerHTML = '<span class="spinner-border spinner-border-sm text-info"></span>';
-        document.getElementById('dash-count-principal').innerHTML = '<span class="spinner-border spinner-border-sm text-warning"></span>';
+    google.script.run
+        .withSuccessHandler(function(res) {
+            if (!res) return;
 
-        // HANYA 1 PANGGILAN SERVER UNTUK SEMUA DATA
-        google.script.run
-            .withSuccessHandler(function(res) {
-                if (!res) return;
+            // 1. Update Counts & Trends
+            let d = res.summaryKru;
+            document.getElementById('dash-total').innerText = d.tTotal;
+            document.getElementById('dash-onboard').innerText = d.tOnboard;
+            document.getElementById('dash-standby').innerText = d.tStandby;
+            document.getElementById('dash-plotting').innerText = d.tPlotting;
 
-                // A. Render Statistik Kru
-                let d = res.summaryKru;
-                document.getElementById('dash-total').innerText = d.tTotal;
-                document.getElementById('dash-onboard').innerText = d.tOnboard;
-                document.getElementById('dash-standby').innerText = d.tStandby;
-                document.getElementById('dash-plotting').innerText = d.tPlotting;
+            renderTrendBadge('trend-total', d.trends.total, d.trends.labelTotal);
+            renderTrendBadge('trend-onboard', d.trends.onboard, 'vs bln lalu');
 
-                let pOnboard = d.tTotal > 0 ? Math.round((d.tOnboard / d.tTotal) * 100) : 0;
-                let pStandby = d.tTotal > 0 ? Math.round((d.tStandby / d.tTotal) * 100) : 0;
-                let pPlotting = d.tTotal > 0 ? Math.round((d.tPlotting / d.tTotal) * 100) : 0;
+            // 2. Update Rasio Progress Bars[cite: 7]
+            let pOnboard = d.tTotal > 0 ? Math.round((d.tOnboard / d.tTotal) * 100) : 0;
+            let pStandby = d.tTotal > 0 ? Math.round((d.tStandby / d.tTotal) * 100) : 0;
+            let pPlotting = d.tTotal > 0 ? Math.round((d.tPlotting / d.tTotal) * 100) : 0;
 
-                document.getElementById('bar-onboard').style.width = pOnboard + '%';
-                document.getElementById('bar-txt-onboard').innerText = pOnboard + '%';
-                document.getElementById('bar-standby').style.width = pStandby + '%';
-                document.getElementById('bar-txt-standby').innerText = pStandby + '%';
-                document.getElementById('bar-plotting').style.width = pPlotting + '%';
-                document.getElementById('bar-txt-plotting').innerText = pPlotting + '%';
+            document.getElementById('bar-onboard').style.width = pOnboard + '%';
+            document.getElementById('bar-txt-onboard').innerText = pOnboard + '%';
+            document.getElementById('bar-standby').style.width = pStandby + '%';
+            document.getElementById('bar-txt-standby').innerText = pStandby + '%';
+            document.getElementById('bar-plotting').style.width = pPlotting + '%';
+            document.getElementById('bar-txt-plotting').innerText = pPlotting + '%';
 
-                // B. Render Kapal & Principal
-                document.getElementById('dash-count-kapal').innerText = res.statsKapal.totalKapal || 0;
-                document.getElementById('dash-count-principal').innerText = res.statsKapal.totalPrincipal || 0;
+            // 3. Update Vessel & Principal Stats[cite: 7]
+            document.getElementById('dash-count-kapal').innerText = res.statsKapal.totalKapal || 0;
+            document.getElementById('dash-count-principal').innerText = res.statsKapal.totalPrincipal || 0;
 
-                // C. Tembakkan data ke fungsi masing-masing agar langsung di-render tanpa loading server lagi
-                renderNotifikasiDokumen(res.notifExpired);
-                renderNotifikasiKontrak(res.notifKontrak);
-                renderNotifikasiPinjaman(res.notifPinjaman);
-                renderLogPerubahan(res.logData);
-            })
-            .withFailureHandler(function(err){
-                console.error("Dashboard Master Fetch Error: ", err);
-            })
-            .getDashboardMasterData();
-    }
+            // 4. Update Logs & Notifications
+            renderLogPerubahan(res.logData);
+            renderNotifikasiDokumen(res.notifExpired);
+            renderNotifikasiKontrak(res.notifKontrak);
+            renderNotifikasiPinjaman(res.notifPinjaman);
+        })
+        .getDashboardMasterData();
+}
+
+function renderTrendBadge(targetId, value, label) {
+    const el = document.getElementById(targetId);
+    if (!el) return;
+    let icon = value >= 0 ? 'bi-arrow-up-right' : 'bi-arrow-down-right';
+    let color = value >= 0 ? 'success' : 'danger';
+    el.innerHTML = `<span class="badge bg-${color} bg-opacity-10 text-${color} rounded-pill px-2 py-1 small"><i class="bi ${icon}"></i> ${Math.abs(value)}%</span> <small class="text-muted">${label}</small>`;
+}
 
     // 4. Trigger Otomatis
     window.addEventListener('load', refreshDashboardKeren);

@@ -10,6 +10,22 @@
   // ==========================================
   // OPTIMASI: 1 PEMANGGILAN UNTUK SEMUA DATA
   // ==========================================
+  function paksaBersihkanUI() {
+    // 1. Hapus class pengunci pada body
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+
+    // 2. Hapus semua elemen backdrop hitam yang tertinggal
+    const backdrops = document.querySelectorAll('.modal-backdrop');
+    backdrops.forEach(b => b.remove());
+
+    // 3. Tutup semua SweetAlert yang mungkin masih menggantung
+    if (typeof Swal !== 'undefined' && Swal.isVisible()) {
+        Swal.close();
+    }
+}
+  
   function loadDataCrew() {
     const tbody = document.getElementById('table-body-crew');
     if(!tbody) return;
@@ -304,8 +320,8 @@
 
   document.addEventListener("DOMContentLoaded", function() {
     loadDataCrew();
-    loadJabatanDropdown();
-    loadStatusDropdown();
+    //loadJabatanDropdown();
+    //loadStatusDropdown();
   });
  
   // LOGIKA TAHAP 2: BULK ONBOARDING
@@ -653,16 +669,46 @@
       if (fKtp) { payload.fileKtpName = fKtp.name; payload.fileKtpData = await fileToBase64(fKtp); }
       if (fTtd) { payload.fileTtdName = fTtd.name; payload.fileTtdData = await fileToBase64(fTtd); }
 
-      google.script.run
-        .withSuccessHandler(function(pesan) {
-          alert(pesan); form.reset();
-          bootstrap.Modal.getInstance(document.getElementById('modalTambahCrew')).hide();
-          loadDataCrew(); btn.innerHTML = 'Simpan Data'; btn.disabled = false;
-        })
-        .withFailureHandler(function(err) {
-          alert("Gagal menyimpan: " + err.message); btn.innerHTML = 'Simpan Data'; btn.disabled = false;
-        })
-        .simpanKruManual(payload);
+      // Di dalam JS_CrewList.html pada formTambahManual listener
+      // Di dalam event listener form-tambah-crew (JS_CrewList.html)
+google.script.run
+  .withSuccessHandler(function(pesan) {
+    currentKodeCrew = payload.kode_crew; // Simpan untuk tahap berikutnya[cite: 14]
+    
+    // 1. Ambil instance modal dan hancurkan total
+    const modalEl = document.getElementById('modalTambahCrew');
+    const modalInst = bootstrap.Modal.getInstance(modalEl);
+    if (modalInst) { modalInst.hide(); }
+
+    // 2. Jeda sejenak lalu bersihkan paksa
+    setTimeout(() => {
+        paksaBersihkanUI(); 
+        formTambahManual.reset();
+        loadDataCrew(); // Refresh tabel
+
+        // 3. Tampilkan penawaran lanjut dengan Swal
+        Swal.fire({
+          title: 'Kru Berhasil Terdaftar!',
+          text: "Lanjut mengisi Data Keluarga (NOK) sekarang?",
+          icon: 'success',
+          showCancelButton: true,
+          confirmButtonText: 'Ya, Isi Keluarga',
+          cancelButtonText: 'Lompati (Skip)',
+          confirmButtonColor: '#4361ee',
+          allowOutsideClick: false
+        }).then((result) => {
+          paksaBersihkanUI(); // Bersihkan lagi setelah klik tombol apapun
+          if (result.isConfirmed) {
+            setTimeout(() => { bukaModalFam(); }, 300); // Buka modal keluarga[cite: 14]
+          } else {
+            setTimeout(() => { tanyaLanjutDokumen(); }, 300);
+          }
+        });
+    }, 500); 
+
+    btn.innerHTML = 'Simpan Data'; btn.disabled = false;
+  })
+  .simpanKruManual(payload); // Kirim ke Crud_Crew.gs[cite: 2]
     });
   }
 
@@ -917,5 +963,61 @@
                 .buatPDFMCUManual(result.value);
         }
     });
+}
+
+function tanyaLanjutDokumen() {
+  paksaBersihkanUI();
+  Swal.fire({
+    title: 'Tahap Berikutnya',
+    text: "Ingin mengunggah Sertifikat/Dokumen kru sekarang?",
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Ya, Upload Berkas',
+    cancelButtonText: 'Lompati (Skip)',
+    confirmButtonColor: '#10b981',
+    allowOutsideClick: false
+  }).then((result) => {
+    paksaBersihkanUI();
+    if (result.isConfirmed) {
+      setTimeout(() => { bukaModalDoc(); }, 300); //[cite: 14]
+    } else {
+      setTimeout(() => { tanyaLanjutPengalaman(); }, 300);
+    }
+  });
+}
+
+function tanyaLanjutPengalaman() {
+  paksaBersihkanUI();
+  Swal.fire({
+    title: 'Tahap Terakhir',
+    text: "Ingin mengisi Riwayat Pengalaman Layar (Sea Services) kru?",
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Ya, Isi Riwayat',
+    cancelButtonText: 'Selesai',
+    confirmButtonColor: '#343a40',
+    allowOutsideClick: false
+  }).then((result) => {
+    paksaBersihkanUI();
+    if (result.isConfirmed) {
+      setTimeout(() => { bukaModalSea(); }, 300); //[cite: 14]
+    } else {
+      Swal.fire('Selesai!', 'Pendaftaran kru selesai.', 'success');
+    }
+  });
+}
+
+/**
+ * Fungsi untuk memaksa pembersihan backdrop modal yang nyangkut
+ */
+function bersihkanBackdropStuck() {
+    // Hapus class modal-open di body agar scroll kembali normal
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+
+    // Cari dan hapus semua elemen backdrop yang masih ada di HTML
+    const backdrops = document.querySelectorAll('.modal-backdrop');
+    backdrops.forEach(b => b.remove());
 }
 </script>

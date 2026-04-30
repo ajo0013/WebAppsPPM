@@ -320,13 +320,38 @@
             const btnSimpanFam = document.getElementById('btn-simpan-fam');
             btnSimpanFam.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Menyimpan...'; btnSimpanFam.disabled = true;
 
-            google.script.run
-                .withSuccessHandler(function(pesan) {
-                    alert(pesan); formFam.reset(); bootstrap.Modal.getInstance(document.getElementById('modalTambahFam')).hide();
-                    google.script.run.withSuccessHandler(renderTableFam).getRelatedData(currentKodeCrew, 'Crew_Fam');
-                    btnSimpanFam.innerHTML = 'Simpan Data'; btnSimpanFam.disabled = false;
-                })
-                .addFamilyData(this);
+            // Di dalam JS_CrewDetail.html
+// Di dalam JS_CrewDetail.html
+google.script.run
+  .withSuccessHandler(function(pesan) {
+    // 1. Ambil instance modal dan tutup
+    const modalFam = document.getElementById('modalTambahFam');
+    const modalInstance = bootstrap.Modal.getInstance(modalFam);
+    if (modalInstance) { modalInstance.hide(); }
+
+    // 2. JEDA PEMBERSIHAN (Sangat penting agar tidak stuck layar buram)
+    setTimeout(() => {
+        bersihkanBackdropStuck(); // Memastikan body kembali normal
+        formFam.reset();
+        
+        // Update tabel jika fungsi render tersedia (saat berada di baris detail)
+        if(typeof renderTableFam === 'function') {
+            google.script.run.withSuccessHandler(renderTableFam).getRelatedData(currentKodeCrew, 'Crew_Fam');
+        }
+
+        // 3. TANYAKAN LANJUT KE DOKUMEN (Pindah ke Wizard berikutnya)
+        tanyaLanjutDokumen(); 
+    }, 400); 
+
+    btnSimpanFam.innerHTML = 'Simpan Data'; 
+    btnSimpanFam.disabled = false;
+  })
+  .withFailureHandler(function(err) {
+      alert("Gagal simpan: " + err.message);
+      btnSimpanFam.innerHTML = 'Simpan Data';
+      btnSimpanFam.disabled = false;
+  })
+  .addFamilyData(this); // Mengirim data form ke Backend Crud_Details.gs[cite: 12]
         });
     }
 
@@ -542,6 +567,11 @@
       }
 
       alert("Semua dokumen berhasil diunggah!");
+      
+      setTimeout(() => {
+        paksaBersihkanUI();
+        tanyaLanjutPengalaman();
+    }, 400);
       
       // --- PERBAIKAN: RESET FORM SETELAH SELESAI ---
       btnSave.disabled = false; 

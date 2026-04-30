@@ -264,26 +264,75 @@ function getDashboardMasterData() {
 
 function hitungSummaryKruOptimal() {
   try {
-    const sheet = getDB().getSheetByName('Crew');
-    if (!sheet) return { tTotal: 0, tOnboard: 0, tStandby: 0, tPlotting: 0 };
+    const ss = getDB();
+    const sheetCrew = ss.getSheetByName('Crew');
+    const sheetDeploy = ss.getSheetByName('Crew_Deploy');
+    if (!sheetCrew) return { tTotal: 0, tOnboard: 0, tStandby: 0, tPlotting: 0, trends: {} };
     
-    const data = sheet.getDataRange().getValues();
-    let tTotal = 0, tOnboard = 0, tStandby = 0, tPlotting = 0;
+    const dataCrew = sheetCrew.getDataRange().getValues();
+    const dataDeploy = sheetDeploy ? sheetDeploy.getDataRange().getDisplayValues() : [];
 
-    // Hitung langsung di server, browser tidak perlu load ribuan baris data
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][0]) { // Pastikan baris memiliki Kode Crew
-        let statusKru = (data[i][12] || '').toString().trim();
+    const today = new Date();
+    const blnSekarang = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, '0');
+    
+    // Hitung Bulan Lalu
+    let lastMonthDate = new Date();
+    lastMonthDate.setMonth(today.getMonth() - 1);
+    const blnLalu = lastMonthDate.getFullYear() + "-" + String(lastMonthDate.getMonth() + 1).padStart(2, '0');
+
+    let stats = { tTotal: 0, tOnboard: 0, tStandby: 0, tPlotting: 0 };
+    let curMonthTotal = 0, lastMonthTotal = 0;
+    let curMonthOn = 0, lastMonthOn = 0;
+
+    // 1. Hitung Status Saat Ini & Tren Total Database
+    for (let i = 1; i < dataCrew.length; i++) {
+      if (dataCrew[i][0]) {
+        let statusKru = (dataCrew[i][12] || '').toString().trim();
+        let tglInput = dataCrew[i][16]; // Index 16: Tanggal Input
+
         if (statusKru.toLowerCase() !== 'blacklisted') {
-          tTotal++;
-          if (statusKru === 'Onboard') tOnboard++;
-          else if (statusKru === 'Plotting') tPlotting++;
-          else tStandby++;
+          stats.tTotal++;
+          if (statusKru === 'Onboard') stats.tOnboard++;
+          else if (statusKru === 'Plotting') stats.tPlotting++;
+          else stats.tStandby++;
+
+          // Logika Tren Total (Berdasarkan Tanggal Input)
+          if (tglInput) {
+            let tglObj = new Date(tglInput);
+            let formatBln = tglObj.getFullYear() + "-" + String(tglObj.getMonth() + 1).padStart(2, '0');
+            if (formatBln === blnSekarang) curMonthTotal++;
+            if (formatBln === blnLalu) lastMonthTotal++;
+          }
         }
       }
     }
-    return { tTotal: tTotal, tOnboard: tOnboard, tStandby: tStandby, tPlotting: tPlotting };
+
+    // 2. Hitung Tren Mutasi Onboard (Berdasarkan Laporan Mutasi)
+    for (let j = 1; j < dataDeploy.length; j++) {
+      let blnLapor = dataDeploy[j][12]; // Index 12: Bulan Laporan
+      let tglOff = dataDeploy[j][10];   // Index 10: Sign Off
+      
+      if (tglOff === "") { // Hanya hitung yang Onboard (Naik)
+        if (blnLapor === blnSekarang) curMonthOn++;
+        if (blnLapor === blnLalu) lastMonthOn++;
+      }
+    }
+
+    // Fungsi Hitung Persentase
+    const hitungPersen = (sekarang, lalu) => {
+      if (lalu === 0) return sekarang > 0 ? 100 : 0;
+      return Math.round(((sekarang - lalu) / lalu) * 100);
+    };
+
+    return {
+      ...stats,
+      trends: {
+        total: hitungPersen(curMonthTotal, lastMonthTotal),
+        onboard: hitungPersen(curMonthOn, lastMonthOn),
+        labelTotal: curMonthTotal + " kru baru"
+      }
+    };
   } catch(e) {
-    return { tTotal: 0, tOnboard: 0, tStandby: 0, tPlotting: 0 };
+    return { tTotal: 0, tOnboard: 0, tStandby: 0, tPlotting: 0, trends: { total: 0, onboard: 0 } };
   }
 }
